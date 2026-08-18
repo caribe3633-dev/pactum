@@ -30,7 +30,7 @@ import { readSyncedEvm, snapshot as evmSnapshot, EAC_META, type EvmStore } from 
  * baselines — the user should not have to visit five modules to find out
  * why an approval is blocked.
  */
-import { refsReadiness, describeRefs, SOURCE_LABELS, approvedRefs, approvedOf, readSourceVersions } from '../../lib/sourceVersions';
+import { refsReadiness, describeRefs, SOURCE_LABELS, SOURCE_KINDS, approvedOf, openOf, readSourceVersions } from '../../lib/sourceVersions';
 
 import {
   readBaselines, createBaseline, activateBaseline, supersedeBaseline, rejectDraft,
@@ -233,8 +233,25 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
   const pkgList = useMemo(() => packageHistory(pkgStore), [pkgStore]);
   const srcReady = useMemo(
     () => refsReadiness(project.id), [project.id, pkgTick, store]);
-  // Automatic reading of latest approved source versions (display/reference only — B=عرض فقط)
-  const autoRefs = useMemo(() => approvedRefs(project.id), [project.id, pkgTick]);
+  /**
+   * SOURCE APPROVAL CARDS — one card per source kind, AUTO-READ from the
+   * versions store on every render. Green = approved with nothing pending;
+   * red = a draft needs review, a submission awaits approval, or no
+   * version exists yet. This replaces the two static text lines.
+   */
+  const sourceCards = useMemo(() => {
+    const sv = readSourceVersions(project.id);
+    return SOURCE_KINDS.map(kind => {
+      const approved = approvedOf(sv, kind);
+      const open = openOf(sv, kind);
+      return {
+        kind,
+        approvedVersion: approved ? approved.version : null,
+        openVersion: open ? open.version : null,
+        openStatus: open ? open.status : null,
+      };
+    });
+  }, [project.id, pkgTick, store]);
 
   /** Builds the next package DRAFT from the approved source versions. */
   const buildPackage = () => {
@@ -451,16 +468,47 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                     ? 'لم تُعتمد أي حزمة بعد — ولهذا تظهر موازنة الإنجاز (BAC) غير متاحة في القيمة المكتسبة.'
                     : 'No package approved yet — which is why Earned Value reports BAC as unavailable.')}
             </p>
-            {pkgCurrent && (
-              <p className="text-(length:--t-second) text-muted mt-1 font-mono">
-                {isRtl ? 'مبنية من' : 'Built from'}: {describeRefs(pkgCurrent.data.sourceRefs, isRtl)}
-              </p>
-            )}
-            {/* Auto-read latest approved refs (display/reference only — no auto-approval) */}
-            <p className="text-(length:--t-second) text-muted-foreground/70 mt-0.5 font-mono text-xs">
-              {isRtl ? 'آخر نسخ معتمدة (قراءة تلقائية): ' : 'Latest approved (auto-read): '}
-              {describeRefs(autoRefs, isRtl)}
-            </p>
+            {/* ── Source approval cards (auto-read) — replaced the old
+                "Built from" / "Latest approved" text lines. Green means
+                approved with nothing pending; red means action needed. */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-px bg-white/5 mt-3">
+              {sourceCards.map(s => {
+                const ok = !s.openVersion && s.approvedVersion !== null;
+                const tone = ok ? 'text-success' : 'text-chart-3';
+                return (
+                  <div
+                    key={s.kind}
+                    className={cn(
+                      'px-3 py-2.5',
+                      ok
+                        ? 'bg-success/[0.06] ring-1 ring-inset ring-success/20'
+                        : 'bg-chart-3/[0.06] ring-1 ring-inset ring-chart-3/20',
+                    )}
+                  >
+                    <div className={cn('lbl mb-1 flex items-center gap-1.5', tone)}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full inline-block', ok ? 'bg-success' : 'bg-chart-3')} />
+                      {isRtl ? SOURCE_LABELS[s.kind].ar : SOURCE_LABELS[s.kind].en}
+                    </div>
+                    <div className={cn('val font-mono', tone)}>
+                      {s.approvedVersion !== null
+                        ? `V${s.approvedVersion}`
+                        : s.openVersion !== null
+                        ? `V${s.openVersion}`
+                        : '—'}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {s.openStatus === 'submitted'
+                        ? (isRtl ? `مُقدَّمة V${s.openVersion} — تنتظر الاعتماد` : `V${s.openVersion} submitted — awaiting approval`)
+                        : s.openStatus === 'draft'
+                        ? (isRtl ? `مسودة V${s.openVersion} — تحتاج مراجعة وإرسالًا` : `Draft V${s.openVersion} — needs review`)
+                        : ok
+                        ? (isRtl ? 'معتمدة ✓' : 'Approved ✓')
+                        : (isRtl ? 'لا توجد نسخة بعد' : 'No version yet')}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
