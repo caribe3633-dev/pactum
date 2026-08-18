@@ -1,5 +1,5 @@
 import React from 'react';
-import { Company } from '../../types';
+import { Company } from '../types';
 import { Pencil, ImageIcon, Archive, ArchiveRestore, Trash2, Settings } from 'lucide-react';
 // SPRINT 3 · R9 — derived portfolio value.
 import { portfolioValues } from '../../../lib/companyPortfolio';

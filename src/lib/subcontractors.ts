@@ -516,7 +516,7 @@ export function aggregateRegistry(
             pendingEotDays: comm.pendingEotDays,
             changeOrdersCount: comm.changeOrdersCount,
             claimsCount: comm.claimsCount,
-            eotCount: comm.eotCount,
+            eotCount: comm.eotCount ?? 0,
 
             latestChangeOrder: comm.latestChangeOrder,
             latestClaim: comm.latestClaim,

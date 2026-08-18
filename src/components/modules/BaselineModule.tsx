@@ -23,15 +23,14 @@ import { computeLd, computeApprovedEOT, computeProgramme } from '../../lib/delay
 // nothing; the current baseline stays authoritative until a person
 // approves a new version.
 import { baselineUpdateStateFor } from '../../lib/baselineGate';
-import { readSyncedEvm, snapshot as evmSnapshot, EAC_META } from '../../lib/evm';
+import { readSyncedEvm, snapshot as evmSnapshot, EAC_META, type EvmStore } from '../../lib/evm';
 /**
  * SOURCE VERSIONING. A baseline is built only from APPROVED source
  * versions, so the five version lines belong on the screen that files
  * baselines — the user should not have to visit five modules to find out
  * why an approval is blocked.
  */
-import SourceVersionsPanel from '../SourceVersionsPanel';
-import { refsReadiness, describeRefs, SOURCE_LABELS, approvedRefs } from '../../lib/sourceVersions';
+import { refsReadiness, describeRefs, SOURCE_LABELS, approvedRefs, approvedOf, readSourceVersions } from '../../lib/sourceVersions';
 
 import {
   readBaselines, createBaseline, activateBaseline, supersedeBaseline, rejectDraft,
@@ -133,21 +132,34 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
    * here reimplements a formula — these are the same objects the Delay, LD
    * and EVM screens are rendering right now.
    */
+  /**
+   * EV BASELINE LINK — the EV family reads from the LATEST APPROVED
+   * 'EVM Planned' source version rather than the live EVM store, so a
+   * baseline can never silently drift from what was actually approved.
+   * Falls back to live only while no approved version exists.
+   */
+  const approvedEvmPlanned = useMemo(() => {
+    const v = approvedOf(readSourceVersions(project.id), 'evm-planned');
+    const snap = v?.snapshot as { settings?: unknown; periods?: unknown[] } | undefined;
+    if (!v || !snap || !Array.isArray(snap.periods) || !snap.settings) return null;
+    return { version: v.version, snapshot: snap as unknown as EvmStore };
+  }, [project.id, pkgTick]);
+
   const live = useMemo(() => {
     const claimsRows: any[] = (() => {
       try { return JSON.parse(localStorage.getItem(`pactum-claims-${project.id}`) || '[]'); }
       catch { return []; }
     })();
 
-    const eot = computeApprovedEOT(project.id, claimsRows);
+    const eot = computeApprovedEOT(project.id);
     const ld = computeLd(project, eot);
     const programme = computeProgramme(project, ld.totalApprovedEOT, ld.totalDelay);
 
-    const evmStore = readSyncedEvm(project);
+    const evmStore = approvedEvmPlanned?.snapshot ?? readSyncedEvm(project);
     const evm = evmSnapshot(project, evmStore);
 
     return { ld, programme, evm, evmStore };
-  }, [project, store]);
+  }, [project, store, approvedEvmPlanned]);
 
   /** The project's reporting currency — stamped onto captured baselines. */
   // PROJECT SCREENS ARE DENOMINATED IN THE CONTRACT CURRENCY.
@@ -403,11 +415,10 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
         </div>
       </div>
 
-      {/* ── The five source version lines ──────────────────────────────
-          Placed above the coverage strip on purpose: what a baseline can
-          be built FROM is the first question, and the answer used to be
-          invisible. */}
-      <SourceVersionsPanel projectId={project.id} canEdit={canEdit} />
+      {/* (Source Versions panel removed from this page by request —
+          the Baseline Package below already AUTO-READS the latest
+          approved versions, and each module still shows its own
+          version line in place.) */}
 
       {/*
         ══════════════════════════════════════════════════════════════════
@@ -577,13 +588,22 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                   </div>
                   <div className="text-(length:--t-second) text-primary font-mono mt-1">
                     V{a.version} · {isRtl ? h.ar : h.en}
+                    {t.value === 'forecast' && approvedEvmPlanned && (
+                      <> · EV Planned V{approvedEvmPlanned.version}</>
+                    )}
                   </div>
                 </>
               ) : (
                 <>
                   <div className="val text-muted-foreground">—</div>
                   <div className="text-(length:--t-second) text-muted-foreground mt-1">
-                    {isRtl ? 'لا يوجد خط أساس' : 'No baseline'}
+                    {t.value === 'forecast'
+                      ? (approvedEvmPlanned
+                          ? (isRtl
+                              ? `مرتبط بـ EV Planned V${approvedEvmPlanned.version} (قراءة تلقائية)`
+                              : `Linked to EV Planned V${approvedEvmPlanned.version} (auto-read)`)
+                          : (isRtl ? 'لا توجد نسخة EVM معتمدة بعد' : 'No approved EVM version yet'))
+                      : (isRtl ? 'لا يوجد خط أساس' : 'No baseline')}
                   </div>
                 </>
               )}

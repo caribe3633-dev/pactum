@@ -41,13 +41,13 @@ export function deleteCompany(companies: Company[], id: string) {
 }
 
 export function archiveCompany(companies: Company[], id: string) {
-  const next = companies.map(x => x.id === id ? { ...x, status: 'Archived' } : x);
+  const next = companies.map(x => x.id === id ? { ...x, status: 'Archived' as const } : x);
   saveCompanies(next);
   return next;
 }
 
 export function unarchiveCompany(companies: Company[], id: string) {
-  const next = companies.map(x => x.id === id ? { ...x, status: 'Active' } : x);
+  const next = companies.map(x => x.id === id ? { ...x, status: 'Active' as const } : x);
   saveCompanies(next);
   return next;
 }

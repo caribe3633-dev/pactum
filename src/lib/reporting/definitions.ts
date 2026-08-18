@@ -75,9 +75,9 @@ registerReport<Ctx & {
   scope: 'Project',
   page: A4L,
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
-    const ld = ctx.ld ?? {};
-    const pr = ctx.programme ?? {};
+    const rows = (ctx.rows ?? []) as any[];
+    const ld = (ctx.ld ?? {}) as Record<string, any>;
+    const pr = (ctx.programme ?? {}) as Record<string, any>;
     const sections: Section[] = [];
 
     if (ctx.summary) sections.push({ kind: 'summary', title: 'Executive Summary', text: ctx.summary });
@@ -168,7 +168,7 @@ registerReport<Ctx & { rows?: any[] }>({
   scope: 'Project',
   page: A4L,
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     return {
       meta: meta(ctx, m, 'Delay Register'),
       page: A4L,
@@ -207,7 +207,7 @@ registerReport<Ctx & { rows?: any[] }>({
   labelAr: 'أوامر التغيير',
   scope: 'Project',
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     const approved = rows.filter(r => r.status === 'approved');
     const review   = rows.filter(r => r.status === 'review');
     return {
@@ -250,7 +250,7 @@ registerReport<Ctx & { rows?: any[] }>({
   labelAr: 'المطالبات',
   scope: 'Project',
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     return {
       meta: meta(ctx, m, 'Claims', 'Contractual Claims Register'),
       page: A4, cover: true,
@@ -293,7 +293,7 @@ registerReport<Ctx & { rows?: any[]; totalIn?: number; totalOut?: number; netFlo
   labelAr: 'التدفق النقدي',
   scope: 'Project',
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     return {
       meta: meta(ctx, m, 'Cash Flow', 'Monthly Ledger'),
       page: A4, cover: true,
@@ -331,7 +331,7 @@ registerReport<Ctx & { rows?: any[]; certified?: number; retention?: number }>({
   scope: 'Project',
   page: A4L,
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     return {
       meta: meta(ctx, m, 'Payment Certificates', 'Interim Payment Certificates'),
       page: A4L, cover: true,
@@ -378,7 +378,7 @@ registerReport<Ctx & { rows?: any[]; exposure?: number }>({
   labelAr: 'سجل المخاطر',
   scope: 'Project',
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     const band = (v: number) => Math.max(1, Math.min(5, Math.ceil(v * 5))) as 1|2|3|4|5;
     const maxImpact = Math.max(1, ...rows.map((r: any) => Number(r.impact) || 0));
     return {
@@ -423,7 +423,7 @@ registerReport<Ctx & { rows?: any[]; totalValue?: number; totalCertified?: numbe
   scope: 'Project',
   page: A4L,
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     return {
       meta: meta(ctx, m, 'Subcontractors', 'Subcontract Commercial Position'),
       page: A4L, cover: true,
@@ -469,8 +469,8 @@ registerReport<Ctx & { computed?: any; summary?: string }>({
   labelAr: 'لوحة المشروع',
   scope: 'Project',
   build: (ctx, m) => {
-    const p = ctx.project ?? {};
-    const c = ctx.computed ?? {};
+    const p = (ctx.project ?? {}) as Record<string, any>;
+    const c = (ctx.computed ?? {}) as Record<string, any>;
     return {
       meta: meta(ctx, m, 'Project Dashboard', 'Executive Overview'),
       page: A4, cover: true, toc: true,
@@ -510,7 +510,7 @@ registerReport<Ctx & { companies?: any[]; aggregate?: number }>({
   labelAr: 'ملخص المحفظة',
   scope: 'Portfolio',
   build: (ctx, m) => {
-    const rows = ctx.companies ?? [];
+    const rows = (ctx.companies ?? []) as any[];
     return {
       meta: { ...meta(ctx, m, 'Enterprise Portfolio', 'Consolidated Summary'), project: undefined, reference: undefined },
       page: A4, cover: true,
@@ -549,7 +549,7 @@ registerReport<Ctx & { rows?: any[] }>({
   labelAr: 'الموازنة',
   scope: 'Project',
   build: (ctx, m) => {
-    const rows = ctx.rows ?? [];
+    const rows = (ctx.rows ?? []) as any[];
     return {
       meta: meta(ctx, m, 'Budget', 'Cost Breakdown Structure'),
       page: A4, cover: true,
@@ -589,8 +589,8 @@ registerReport<Ctx & { evm?: any }>({
   // portrait default because their tables are 5-7 columns and fit.
   page: A4L,
   build: (ctx, m) => {
-    const e = ctx.evm ?? {};
-    const per = ctx.periods ?? [];
+    const e = (ctx.evm ?? {}) as Record<string, any>;
+    const per = (ctx.periods ?? []) as any[];
     // An index of null means the denominator was zero. Printing "0.00" there
     // would assert a measurement that was never taken.
     const idx = (v: unknown) => (v === null || v === undefined ? '—' : Number(v).toFixed(3));
@@ -646,7 +646,7 @@ registerReport<Ctx & { evm?: any }>({
       { label: 'Position',        value: String(e.quadrant ?? '—') },
     ]});
 
-    const opts = ctx.eacOptions ?? [];
+    const opts = (ctx.eacOptions ?? []) as any[];
     if (opts.length) {
       sections.push({ kind: 'table', title: 'EAC Method Comparison',
         columns: [
@@ -665,7 +665,7 @@ registerReport<Ctx & { evm?: any }>({
       });
     }
 
-    const bls = ctx.baselines ?? [];
+    const bls = (ctx.baselines ?? []) as any[];
     if (bls.length) {
       sections.push({ kind: 'table', title: 'Baseline Register',
         columns: [
@@ -750,15 +750,15 @@ registerReport<Ctx & {
   scope: 'Project',
   page: A4,
   build: (ctx, m) => {
-    const s   = ctx.sub ?? {};
-    const r   = ctx.roll ?? {};
-    const ld  = ctx.ld ?? {};
-    const pr  = ctx.programme ?? {};
-    const pf  = ctx.perf ?? {};
-    const cos    = ctx.changeOrders ?? [];
-    const claims = ctx.claims ?? [];
-    const delays = ctx.delays ?? [];
-    const certs  = ctx.certificates ?? [];
+    const s   = (ctx.sub ?? {}) as Record<string, any>;
+    const r   = (ctx.roll ?? {}) as Record<string, any>;
+    const ld  = (ctx.ld ?? {}) as Record<string, any>;
+    const pr  = (ctx.programme ?? {}) as Record<string, any>;
+    const pf  = (ctx.perf ?? {}) as Record<string, any>;
+    const cos    = (ctx.changeOrders ?? []) as any[];
+    const claims = (ctx.claims ?? []) as any[];
+    const delays = (ctx.delays ?? []) as any[];
+    const certs  = (ctx.certificates ?? []) as any[];
     const isAr = m.lang === 'ar';
 
     const sections: Section[] = [];
@@ -946,9 +946,9 @@ registerReport<Ctx & { timeline?: any; snapshot?: any; snapshots?: any[] }>({
   scope: 'Project',
   page: A4,
   build: (ctx, m) => {
-    const t = ctx.timeline ?? {};
-    const s = ctx.snapshot ?? {};
-    const hist = ctx.snapshots ?? [];
+    const t = (ctx.timeline ?? {}) as Record<string, any>;
+    const s = (ctx.snapshot ?? {}) as Record<string, any>;
+    const hist = (ctx.snapshots ?? []) as any[];
     const idx = (v: unknown) => (v === null || v === undefined ? '—' : Number(v).toFixed(3));
     const sections: Section[] = [];
 
@@ -1215,11 +1215,11 @@ registerReport<Ctx & {
   scope: 'Project',
   page: A4L,
   build: (ctx, m) => {
-    const reg: any[] = ctx.register ?? [];
-    const hist: any[] = ctx.history ?? [];
-    const drift: any[] = ctx.drift ?? [];
+    const reg: any[] = (ctx.register ?? []) as any[];
+    const hist: any[] = (ctx.history ?? []) as any[];
+    const drift: any[] = (ctx.drift ?? []) as any[];
     const cmp = ctx.comparison ?? null;
-    const detail: any[] = ctx.detail ?? [];
+    const detail: any[] = (ctx.detail ?? []) as any[];
     const active = ctx.active ?? null;
     const cov = ctx.coverage ?? null;
     const sections: Section[] = [];
@@ -1404,13 +1404,13 @@ registerReport<Ctx & {
   scope: 'Company',
   page: A4L,
   build: (ctx, m) => {
-    const reg: any[] = ctx.register ?? [];
-    const corr: any[] = ctx.corrections ?? [];
+    const reg: any[] = (ctx.register ?? []) as any[];
+    const corr: any[] = (ctx.corrections ?? []) as any[];
     const integ = ctx.integrity ?? null;
-    const applied: any[] = ctx.appliedHistory ?? [];
-    const trail: any[] = ctx.reportingTrail ?? [];
-    const frozen: any[] = ctx.frozenRates ?? [];
-    const frozenApplied: any[] = ctx.appliedRatesFrozen ?? [];
+    const applied: any[] = (ctx.appliedHistory ?? []) as any[];
+    const trail: any[] = (ctx.reportingTrail ?? []) as any[];
+    const frozen: any[] = (ctx.frozenRates ?? []) as any[];
+    const frozenApplied: any[] = (ctx.appliedRatesFrozen ?? []) as any[];
     const sections: Section[] = [];
     const rate4 = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v).toFixed(4) : '—');
 
@@ -1972,7 +1972,7 @@ registerReport<any>({
       ]});
     }
 
-    const trend: any[] = ctx.trend ?? [];
+    const trend: any[] = (ctx.trend ?? []) as any[];
     if (trend.length) {
       s.push({ kind: 'table', title: 'Trend Across Approved Periods',
         columns: [
@@ -1995,7 +1995,7 @@ registerReport<any>({
       });
     }
 
-    const fc: any[] = ctx.forecastSeries ?? [];
+    const fc: any[] = (ctx.forecastSeries ?? []) as any[];
     if (fc.length > 1) {
       s.push({ kind: 'table', title: 'Has Our View of the Outturn Improved?',
         columns: [
@@ -2016,7 +2016,7 @@ registerReport<any>({
       });
     }
 
-    const bt: any[] = ctx.baselineTrail ?? [];
+    const bt: any[] = (ctx.baselineTrail ?? []) as any[];
     if (bt.some((r: any) => r.rebaselined)) {
       s.push({ kind: 'table', title: 'Baseline Changes During the Period Range',
         columns: [
@@ -2122,7 +2122,7 @@ registerReport<any>({
       ]});
     }
 
-    const tr: any[] = ctx.trend ?? [];
+    const tr: any[] = (ctx.trend ?? []) as any[];
     if (tr.length > 1) {
       s.push({ kind: 'table', title: 'Position by Period',
         columns: [
@@ -2322,7 +2322,7 @@ registerReport<any>({
           + 'converted into one — which is why the claimed and settled figures above sit '
           + 'beside the contract value rather than inside it.' });
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Claims by Period',
         columns: [
@@ -2402,7 +2402,7 @@ registerReport<any>({
       ]});
     }
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Delay by Period',
         columns: [
@@ -2501,7 +2501,7 @@ registerReport<any>({
       ]});
     }
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Earned Value by Period',
         columns: [
@@ -2598,7 +2598,7 @@ registerReport<any>({
       ]});
     }
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Commercial Position by Period',
         columns: [
@@ -2665,7 +2665,7 @@ registerReport<any>({
         text: 'This period did not record a subcontract section.' });
     }
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Subcontracts by Period',
         columns: [
@@ -2741,7 +2741,7 @@ registerReport<any>({
       ]});
     }
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Cash by Period',
         columns: [
@@ -2794,7 +2794,7 @@ registerReport<any>({
       { label: 'Currencies Archived', value: (ctx.currencies ?? []).join(', ') || '—' },
     ]});
 
-    const fr: any[] = ctx.frozenRates ?? [];
+    const fr: any[] = (ctx.frozenRates ?? []) as any[];
     if (fr.length) {
       s.push({ kind: 'table', title: 'Frozen Rate Table (as approved)',
         columns: [
@@ -2817,7 +2817,7 @@ registerReport<any>({
       });
     }
 
-    const ar: any[] = ctx.appliedRatesFrozen ?? [];
+    const ar: any[] = (ctx.appliedRatesFrozen ?? []) as any[];
     if (ar.length) {
       s.push({ kind: 'table', title: 'Rates Applied in This Period',
         columns: [
@@ -2844,7 +2844,7 @@ registerReport<any>({
             + 'reporting currency.' });
     }
 
-    const mv: any[] = ctx.movements ?? [];
+    const mv: any[] = (ctx.movements ?? []) as any[];
     mv.forEach((g: any) => {
       if ((g.rows ?? []).length < 2) return;
       s.push({ kind: 'table', title: `${g.currency} — Frozen Rate by Period`,
@@ -2866,7 +2866,7 @@ registerReport<any>({
       });
     });
 
-    const ah: any[] = ctx.appliedHistory ?? [];
+    const ah: any[] = (ctx.appliedHistory ?? []) as any[];
     if (ah.length > 1) {
       s.push({ kind: 'table', title: 'Applied Rates Across Periods',
         columns: [
@@ -2885,7 +2885,7 @@ registerReport<any>({
       });
     }
 
-    const rt: any[] = ctx.reportingTrail ?? [];
+    const rt: any[] = (ctx.reportingTrail ?? []) as any[];
     if (rt.length > 1 && ctx.mixedReporting) {
       s.push({ kind: 'table', title: 'Reporting Currency by Period',
         columns: [
@@ -3529,7 +3529,7 @@ registerReport<any>({
             + 'available for it.' });
     }
 
-    const h: any[] = ctx.history ?? [];
+    const h: any[] = (ctx.history ?? []) as any[];
     if (h.length > 1) {
       s.push({ kind: 'table', title: 'Variation Movement by Period',
         columns: [

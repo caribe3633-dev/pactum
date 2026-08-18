@@ -102,7 +102,7 @@ export const BASELINE_TYPES: { value: BaselineType; en: string; ar: string }[] =
   { value: 'budget',   en: 'Budget Baseline',   ar: 'خط أساس الموازنة' },
   { value: 'cashflow', en: 'Cash Flow Baseline',ar: 'خط أساس التدفق النقدي' },
   { value: 'schedule', en: 'Schedule Baseline', ar: 'خط أساس البرنامج الزمني' },
-  { value: 'forecast', en: 'Forecast Baseline', ar: 'خط أساس التوقعات' },
+  { value: 'forecast', en: 'EV Baseline', ar: 'خط الأساس للقيمة المكتسبة (EV)' },
 ];
 
 export const BASELINE_STATUSES: { value: BaselineStatus; en: string; ar: string }[] = [
@@ -1084,8 +1084,8 @@ export function compareBaselines(
     return { ok: false, reason: 'type-mismatch', rows: [], changedCount: 0, daysBetween: null };
   }
 
-  const da = a.data as Record<string, unknown>;
-  const db = b.data as Record<string, unknown>;
+  const da = a.data as unknown as Record<string, unknown>;
+  const db = b.data as unknown as Record<string, unknown>;
   const keys = Array.from(new Set([...Object.keys(da), ...Object.keys(db)]))
     .filter(k => !Array.isArray(da[k]) && !Array.isArray(db[k]));
 
@@ -1448,7 +1448,7 @@ export function driftOf(store: BaselineStore, type: BaselineType, field: string)
   const list = historyOf(store, type);
   let prev: number | null = null;
   return list.map(b => {
-    const raw = (b.data as Record<string, unknown>)[field];
+    const raw = (b.data as unknown as Record<string, unknown>)[field];
     const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
     const delta = value !== null && prev !== null ? value - prev : null;
     if (value !== null) prev = value;
@@ -2072,7 +2072,7 @@ function __readItem(r: unknown): {
 } {
   const row = r as CostBearingRow;
   const c = __costOf(row);
-  const no = (row as Record<string, unknown>)?.no;
+  const no = (row as unknown as Record<string, unknown>)?.no;
   return {
     ref: typeof no === 'string' && no.trim() ? no : '(unnumbered)',
     direct: c && c.assessed ? c.directImpact : 0,
@@ -2198,9 +2198,9 @@ export function rebuildPackage(input: RebuildInput): RebuildResult {
   // ── Q2=A: cash flow snapshotted as entered. Never derived, never ─────
   //     adjusted to make the gate pass.
   const plannedCashIn = (Array.isArray(input.cashRows) ? input.cashRows : [])
-    .reduce((a, r) => a + num((r as Record<string, unknown>)?.plannedIn), 0);
+    .reduce((a, r) => a + num((r as unknown as Record<string, unknown>)?.plannedIn), 0);
   const plannedCashOut = (Array.isArray(input.cashRows) ? input.cashRows : [])
-    .reduce((a, r) => a + num((r as Record<string, unknown>)?.plannedOut), 0);
+    .reduce((a, r) => a + num((r as unknown as Record<string, unknown>)?.plannedOut), 0);
 
   const data: PackageData = {
     currency: str(input.currency),

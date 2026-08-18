@@ -102,7 +102,7 @@ export default function EnterprisePortfolio() {
         companies={companies}
         onChange={handleChange}
         open={modalOpen}
-        onOpenChange={(v) => { if (!v) setModalShowWizard(false); setModalOpen(v); }}
+        onOpenChange={(v: boolean) => { if (!v) setModalShowWizard(false); setModalOpen(v); }}
         hideTrigger
         initialShowWizard={modalShowWizard}
       />

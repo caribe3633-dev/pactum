@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`EVM — Budget at Completion (golden) > computeBac: العقد الأساسي + COs + Claims معتمدة 1`] = `
+{
+  "bac": 10000000,
+  "base": 10000000,
+  "claims": 0,
+  "cos": 0,
+  "overridden": false,
+}
+`;
+
+exports[`EVM — Budget at Completion (golden) > computeBac: مشروع ناقص البيانات (دفاعي) 1`] = `
+{
+  "bac": 0,
+  "base": 0,
+  "claims": 0,
+  "cos": 0,
+  "overridden": false,
+}
+`;
+
+exports[`EVM — Budget at Completion (golden) > computeBac: من غير أوامر تغيير ولا مطالبات 1`] = `
+{
+  "bac": 10000000,
+  "base": 10000000,
+  "claims": 0,
+  "cos": 0,
+  "overridden": false,
+}
+`;
+
+exports[`EVM — Budget at Completion (golden) > computeBacSplit: توزيع الـ BAC على مكوناته 1`] = `
+{
+  "available": false,
+  "directBac": 0,
+  "indirectBac": 0,
+  "overridden": false,
+  "packageVersion": 0,
+  "reason": "no-approved-baseline",
+  "totalBac": 0,
+}
+`;
+
+exports[`EVM — Budget at Completion (golden) > computeBacSplit: توزيع الـ BAC على مكوناته 2`] = `
+{
+  "available": false,
+  "directBac": 0,
+  "indirectBac": 0,
+  "overridden": false,
+  "packageVersion": 0,
+  "reason": "no-approved-baseline",
+  "totalBac": 0,
+}
+`;
+
+exports[`EVM — Budget at Completion (golden) > readProgress: قراءة نسبة التقدم (رقمي/نصي/فاضي) 1`] = `1`;
+
+exports[`EVM — Budget at Completion (golden) > readProgress: قراءة نسبة التقدم (رقمي/نصي/فاضي) 2`] = `0`;
+
+exports[`EVM — Budget at Completion (golden) > readProgress: قراءة نسبة التقدم (رقمي/نصي/فاضي) 3`] = `0`;
+
+exports[`EVM — Budget at Completion (golden) > readProgress: قراءة نسبة التقدم (رقمي/نصي/فاضي) 4`] = `1`;

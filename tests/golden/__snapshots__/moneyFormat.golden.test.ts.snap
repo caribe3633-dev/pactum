@@ -1,0 +1,46 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Money formatting (golden) > abbrevMoney: الاختصار (K/M/B) 1`] = `"0"`;
+
+exports[`Money formatting (golden) > abbrevMoney: الاختصار (K/M/B) 2`] = `"950"`;
+
+exports[`Money formatting (golden) > abbrevMoney: الاختصار (K/M/B) 3`] = `"1.25M"`;
+
+exports[`Money formatting (golden) > abbrevMoney: الاختصار (K/M/B) 4`] = `"3.40B"`;
+
+exports[`Money formatting (golden) > abbrevMoney: الاختصار (K/M/B) 5`] = `"-2.75M"`;
+
+exports[`Money formatting (golden) > abbrevMoney: الاختصار (K/M/B) 6`] = `"—"`;
+
+exports[`Money formatting (golden) > exactMoney: القيمة الدقيقة 1`] = `"SAR 1,234,568"`;
+
+exports[`Money formatting (golden) > exactMoney: القيمة الدقيقة 2`] = `"USD 1"`;
+
+exports[`Money formatting (golden) > kpiMoney: أرقام الـ KPI بعملات مختلفة 1`] = `"SAR 10.5M"`;
+
+exports[`Money formatting (golden) > kpiMoney: أرقام الـ KPI بعملات مختلفة 2`] = `"USD 988K"`;
+
+exports[`Money formatting (golden) > kpiMoney: أرقام الـ KPI بعملات مختلفة 3`] = `"EGP -45K"`;
+
+exports[`Money formatting (golden) > kpiMoney: أرقام الـ KPI بعملات مختلفة 4`] = `"—"`;
+
+exports[`Money formatting (golden) > moneyCell: خلية الجدول (نص + عنوان) 1`] = `
+{
+  "text": "5.60M",
+  "title": "SAR 5,600,000",
+}
+`;
+
+exports[`Money formatting (golden) > moneyCell: خلية الجدول (نص + عنوان) 2`] = `
+{
+  "text": "5.60M",
+  "title": "USD 5,600,000",
+}
+`;
+
+exports[`Money formatting (golden) > moneyCell: خلية الجدول (نص + عنوان) 3`] = `
+{
+  "text": "—",
+  "title": "—",
+}
+`;

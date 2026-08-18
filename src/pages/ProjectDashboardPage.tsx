@@ -85,7 +85,7 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
   );
 
   const breadcrumbItems = useMemo(() => {
-    const items = [
+    const items: { label: string; href?: string }[] = [
       { label: 'Enterprise Portfolio', href: '/' },
     ];
     if (company) {

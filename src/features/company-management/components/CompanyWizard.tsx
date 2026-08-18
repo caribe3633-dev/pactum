@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Company } from '../../types';
+import { Company } from '../types';
 import { CURRENCY_SEED } from '../../../lib/currency';
 import { CALENDARS } from '../../../lib/masterData';
 import { AlertTriangle } from 'lucide-react';

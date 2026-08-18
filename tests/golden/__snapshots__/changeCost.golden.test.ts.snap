@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Cost bearing rows (golden) > costOf: قراءة كتلة التكلفة دفاعيًا 1`] = `
+{
+  "assessed": false,
+  "assessedAt": undefined,
+  "assessedBy": undefined,
+  "budgetLineRef": undefined,
+  "costApproval": "pending",
+  "costApprovedAt": undefined,
+  "costApprovedBy": undefined,
+  "costNote": undefined,
+  "directImpact": 0,
+  "indirectImpact": 0,
+}
+`;
+
+exports[`Cost bearing rows (golden) > costOf: قراءة كتلة التكلفة دفاعيًا 2`] = `null`;
+
+exports[`Cost bearing rows (golden) > costOf: قراءة كتلة التكلفة دفاعيًا 3`] = `null`;
+
+exports[`Cost bearing rows (golden) > costState: زوج الحالة (تقييم + اعتماد) 1`] = `
+{
+  "approval": "pending",
+  "assessment": "required",
+  "figures": null,
+  "legacy": false,
+}
+`;
+
+exports[`Cost bearing rows (golden) > costState: زوج الحالة (تقييم + اعتماد) 2`] = `
+{
+  "approval": "pending",
+  "assessment": "required",
+  "figures": null,
+  "legacy": true,
+}
+`;
+
+exports[`Cost bearing rows (golden) > costState: زوج الحالة (تقييم + اعتماد) 3`] = `
+{
+  "approval": "pending",
+  "assessment": "required",
+  "figures": null,
+  "legacy": true,
+}
+`;
+
+exports[`Cost bearing rows (golden) > isBaselineEligible / isLegacy 1`] = `false`;
+
+exports[`Cost bearing rows (golden) > isBaselineEligible / isLegacy 2`] = `false`;
+
+exports[`Cost bearing rows (golden) > isBaselineEligible / isLegacy 3`] = `true`;
+
+exports[`Cost bearing rows (golden) > isBaselineEligible / isLegacy 4`] = `false`;
+
+exports[`Cost bearing rows (golden) > labels: تسميات الحالة عربي/إنجليزي 1`] = `"Approved"`;
+
+exports[`Cost bearing rows (golden) > labels: تسميات الحالة عربي/إنجليزي 2`] = `"معتمدة"`;
+
+exports[`Cost bearing rows (golden) > labels: تسميات الحالة عربي/إنجليزي 3`] = `"Required"`;
+
+exports[`Cost bearing rows (golden) > labels: تسميات الحالة عربي/إنجليزي 4`] = `"مطلوب"`;

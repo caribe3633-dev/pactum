@@ -263,6 +263,8 @@ export interface CommercialRollup {
    */
   approvedEotDays: number;
   pendingEotDays: number;
+  /** Number of approved EOT events (change orders + claims granting time). */
+  eotCount?: number;
 
   /** Σ costImpact across every subcontract delay row. */
   grossDelayCost: number;

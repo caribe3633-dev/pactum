@@ -143,7 +143,7 @@ export default function TimelineModule({ project, canEdit = true }: { project: P
     })();
 
     // Delay + LD, from lib/delayCalculations — unchanged engine.
-    const eot = computeApprovedEOT(project.id, claimsRows);
+    const eot = computeApprovedEOT(project.id);
     const ld = computeLd(project, eot);
     const programme = computeProgramme(project, ld.totalApprovedEOT, ld.totalDelay);
     const counts = collectDelayCounts(project.id);

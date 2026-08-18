@@ -1,0 +1,64 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Delay windows (golden) > isWindowClosed: هل النافذة مقفولة؟ 1`] = `true`;
+
+exports[`Delay windows (golden) > isWindowClosed: هل النافذة مقفولة؟ 2`] = `false`;
+
+exports[`Delay windows (golden) > isWindowClosed: هل النافذة مقفولة؟ 3`] = `false`;
+
+exports[`Delay windows (golden) > monthRange: نطاق الشهور من-إلى 1`] = `
+[
+  "2026-01",
+  "2026-02",
+  "2026-03",
+  "2026-04",
+  "2026-05",
+  "2026-06",
+  "2026-07",
+  "2026-08",
+]
+`;
+
+exports[`Delay windows (golden) > monthRange: نطاق الشهور من-إلى 2`] = `
+[
+  "2025-11",
+  "2025-12",
+  "2026-01",
+  "2026-02",
+]
+`;
+
+exports[`Delay windows (golden) > monthRange: نطاق الشهور من-إلى 3`] = `
+[
+  "2026-05",
+]
+`;
+
+exports[`Delay windows (golden) > windowClosesOn: تاريخ إغلاق النافذة 1`] = `"2026-08-31"`;
+
+exports[`Delay windows (golden) > windowClosesOn: تاريخ إغلاق النافذة 2`] = `"2025-02-28"`;
+
+exports[`Delay windows (golden) > windowDelta: الفرق بين نافذتين 1`] = `
+{
+  "approvedEot": 3,
+  "costImpact": NaN,
+  "delayEventCount": NaN,
+  "ldExposure": NaN,
+  "totalDelay": 8,
+  "unmitigatedDelay": 8,
+}
+`;
+
+exports[`Delay windows (golden) > windowDelta: الفرق بين نافذتين 2`] = `null`;
+
+exports[`Delay windows (golden) > windowIdFor: معرّف النافذة من تاريخ 1`] = `"2026-08"`;
+
+exports[`Delay windows (golden) > windowIdFor: معرّف النافذة من تاريخ 2`] = `"2025-01"`;
+
+exports[`Delay windows (golden) > windowIdFor: معرّف النافذة من تاريخ 3`] = `"2025-12"`;
+
+exports[`Delay windows (golden) > windowLabel: التسمية عربي/إنجليزي 1`] = `"August 2026"`;
+
+exports[`Delay windows (golden) > windowLabel: التسمية عربي/إنجليزي 2`] = `"أغسطس 2026"`;
+
+exports[`Delay windows (golden) > windowLabel: التسمية عربي/إنجليزي 3`] = `"December 2025"`;

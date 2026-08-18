@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Subcontractor commercial (golden) > currentContractValue: الأصل + المعتمد 1`] = `1250000`;
+
+exports[`Subcontractor commercial (golden) > currentContractValue: الأصل + المعتمد 2`] = `0`;
+
+exports[`Subcontractor commercial (golden) > normaliseDocUrl: تطبيع روابط المستندات 1`] = `"https://sharepoint/doc1"`;
+
+exports[`Subcontractor commercial (golden) > normaliseDocUrl: تطبيع روابط المستندات 2`] = `""`;
+
+exports[`Subcontractor commercial (golden) > normaliseDocUrl: تطبيع روابط المستندات 3`] = `""`;
+
+exports[`Subcontractor commercial (golden) > rollupCommercial: أوامر وقت بس من غير فلوس 1`] = `
+{
+  "approvedChangeOrders": 0,
+  "approvedClaimEotDays": 0,
+  "approvedClaims": 0,
+  "approvedCoEotDays": 30,
+  "approvedEotDays": 30,
+  "changeOrdersCount": 1,
+  "claimsCount": 0,
+  "delayCount": 0,
+  "grossDelayCost": 0,
+  "latestChangeOrder": {
+    "date": "2026-06-01",
+    "description": "Time only",
+    "ref": "CO-009",
+    "status": "approved",
+    "value": 0,
+  },
+  "latestClaim": null,
+  "latestEot": null,
+  "pendingChangeOrders": 0,
+  "pendingEotDays": 0,
+  "submittedClaims": 0,
+}
+`;
+
+exports[`Subcontractor commercial (golden) > rollupCommercial: تجميع معتمد/معلق/مرفوض + EOT 1`] = `
+{
+  "approvedChangeOrders": 250000,
+  "approvedClaimEotDays": 15,
+  "approvedClaims": 80000,
+  "approvedCoEotDays": 10,
+  "approvedEotDays": 25,
+  "changeOrdersCount": 3,
+  "claimsCount": 2,
+  "delayCount": 0,
+  "grossDelayCost": 0,
+  "latestChangeOrder": {
+    "date": "2026-03-15",
+    "description": "Rejected extra",
+    "ref": "CO-003",
+    "status": "rejected",
+    "value": 999999,
+  },
+  "latestClaim": {
+    "date": "2026-05-01",
+    "description": "Pending claim",
+    "ref": "CLM-002",
+    "status": "submitted",
+    "value": 40000,
+  },
+  "latestEot": null,
+  "pendingChangeOrders": 0,
+  "pendingEotDays": 0,
+  "submittedClaims": 120000,
+}
+`;
+
+exports[`Subcontractor commercial (golden) > rollupCommercial: فارغ تمامًا 1`] = `
+{
+  "approvedChangeOrders": 0,
+  "approvedClaimEotDays": 0,
+  "approvedClaims": 0,
+  "approvedCoEotDays": 0,
+  "approvedEotDays": 0,
+  "changeOrdersCount": 0,
+  "claimsCount": 0,
+  "delayCount": 0,
+  "grossDelayCost": 0,
+  "latestChangeOrder": null,
+  "latestClaim": null,
+  "latestEot": null,
+  "pendingChangeOrders": 0,
+  "pendingEotDays": 0,
+  "submittedClaims": 0,
+}
+`;

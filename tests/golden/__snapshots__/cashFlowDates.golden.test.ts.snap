@@ -1,0 +1,100 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Cash flow dates (golden) > lastDayOfMonth: آخر يوم في الشهر 1`] = `"2026-02-28"`;
+
+exports[`Cash flow dates (golden) > lastDayOfMonth: آخر يوم في الشهر 2`] = `"2028-02-29"`;
+
+exports[`Cash flow dates (golden) > lastDayOfMonth: آخر يوم في الشهر 3`] = `"2026-12-31"`;
+
+exports[`Cash flow dates (golden) > monthLabel + groupByWindow: تجميع الصفوف بالنافذة 1`] = `"April 2026"`;
+
+exports[`Cash flow dates (golden) > monthLabel + groupByWindow: تجميع الصفوف بالنافذة 2`] = `
+[
+  {
+    "fullyDated": false,
+    "label": "2026-03-10",
+    "rowCount": 1,
+    "rowIndexes": [
+      0,
+    ],
+    "window": "2026-03-10",
+  },
+  {
+    "fullyDated": false,
+    "label": "2026-03-25",
+    "rowCount": 1,
+    "rowIndexes": [
+      1,
+    ],
+    "window": "2026-03-25",
+  },
+  {
+    "fullyDated": false,
+    "label": "2026-04-02",
+    "rowCount": 1,
+    "rowIndexes": [
+      2,
+    ],
+    "window": "2026-04-02",
+  },
+  {
+    "fullyDated": false,
+    "label": "—",
+    "rowCount": 1,
+    "rowIndexes": [
+      3,
+    ],
+    "window": "—",
+  },
+]
+`;
+
+exports[`Cash flow dates (golden) > normaliseIso: تطبيع التواريخ المدخلة 1`] = `""`;
+
+exports[`Cash flow dates (golden) > normaliseIso: تطبيع التواريخ المدخلة 2`] = `"2026-03-15"`;
+
+exports[`Cash flow dates (golden) > normaliseIso: تطبيع التواريخ المدخلة 3`] = `""`;
+
+exports[`Cash flow dates (golden) > normaliseIso: تطبيع التواريخ المدخلة 4`] = `""`;
+
+exports[`Cash flow dates (golden) > parseMonthLabel: تحليل تسميات الشهور 1`] = `
+{
+  "date": "2026-03-31",
+  "detail": "English month name",
+  "parsed": true,
+  "window": "2026-03",
+}
+`;
+
+exports[`Cash flow dates (golden) > parseMonthLabel: تحليل تسميات الشهور 2`] = `
+{
+  "date": "2026-01-31",
+  "detail": "Arabic month name",
+  "parsed": true,
+  "window": "2026-01",
+}
+`;
+
+exports[`Cash flow dates (golden) > parseMonthLabel: تحليل تسميات الشهور 3`] = `
+{
+  "date": "2025-12-31",
+  "detail": "numeric month/year",
+  "parsed": true,
+  "window": "2025-12",
+}
+`;
+
+exports[`Cash flow dates (golden) > parseMonthLabel: تحليل تسميات الشهور 4`] = `
+{
+  "date": "",
+  "detail": "no recognisable month",
+  "parsed": false,
+  "window": "",
+}
+`;
+
+exports[`Cash flow dates (golden) > windowOf: نافذة الشهر من تاريخ ISO 1`] = `"2026-03"`;
+
+exports[`Cash flow dates (golden) > windowOf: نافذة الشهر من تاريخ ISO 2`] = `"2026-12"`;
+
+exports[`Cash flow dates (golden) > windowOf: نافذة الشهر من تاريخ ISO 3`] = `""`;

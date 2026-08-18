@@ -53,7 +53,7 @@ export interface ReportMeta {
 
 // â”€â”€ Sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export type Align = 'start' | 'end' | 'center';
+export type Align = 'start' | 'end' | 'center' | 'right';
 
 export interface Column {
   key: string;
@@ -78,7 +78,7 @@ export interface KpiItem {
   label: string;
   value: string | number;
   unit?: string;
-  tone?: 'default' | 'gold' | 'ok' | 'warn' | 'risk';
+  tone?: "default" | "gold" | "ok" | "warn" | "risk";
   /** Small line under the figure. */
   note?: string;
 }
@@ -86,14 +86,16 @@ export interface KpiItem {
 export interface InfoItem {
   label: string;
   value: string;
-  tone?: 'default' | 'gold' | 'ok' | 'warn' | 'risk';
+  tone?: "default" | "gold" | "ok" | "warn" | "risk";
+  unit?: string;
 }
 
 export interface TimelineItem {
   label: string;
   date?: string;
   value?: string;
-  tone?: 'default' | 'gold' | 'ok' | 'warn' | 'risk';
+  tone?: "default" | "gold" | "ok" | "warn" | "risk";
+  unit?: string;
   note?: string;
 }
 
@@ -102,7 +104,8 @@ export interface BarItem {
   /** 0..1 */
   ratio: number;
   value?: string;
-  tone?: 'default' | 'gold' | 'ok' | 'warn' | 'risk';
+  tone?: "default" | "gold" | "ok" | "warn" | "risk";
+  unit?: string;
 }
 
 export interface RiskCell {
