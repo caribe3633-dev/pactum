@@ -82,7 +82,7 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
   const isRtl = lang === 'ar';
 
   const [store, setStore] = useState<BaselineStore>(() => readBaselines(project.id));
-  const [activeType, setActiveType] = useState<BaselineType>('contract');
+  const [activeType, setActiveType] = useState<BaselineType>('budget');
 
   /**
    * ════════════════════════════════════════════════════════════════════
@@ -471,7 +471,7 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
             {/* ── Source approval cards (auto-read) — replaced the old
                 "Built from" / "Latest approved" text lines. Green means
                 approved with nothing pending; red means action needed. */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-px bg-white/5 mt-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-px bg-white/5 mt-3">
               {sourceCards.map(s => {
                 const ok = !s.openVersion && s.approvedVersion !== null;
                 const tone = ok ? 'text-success' : 'text-chart-3';
@@ -613,51 +613,22 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
         )}
       </div>
 
-      {/* ── Coverage strip: which families have a plan in force ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-px bg-white/5">
-        {BASELINE_TYPES.map(t => {
-          const a = activeOf(store, t.value);
-          const h = HEADLINE[t.value];
-          const val = a ? (a.data as Record<string, any>)[h.field] : null;
-          return (
-            <button
-              key={t.value}
-              onClick={() => setActiveType(t.value)}
-              className={cn(
-                'bg-black/30 px-4 py-3 text-start transition-colors hover:bg-black/50',
-                activeType === t.value && 'bg-primary/[0.06] ring-1 ring-inset ring-primary/25',
-              )}
-            >
-              <div className="lbl mb-1.5">{isRtl ? t.ar : t.en}</div>
-              {a ? (
-                <>
-                  <div className="val" title={h.money ? exactMoney(val, ccy) : undefined}>
-                    {h.money ? abbrevMoney(val) : val === null ? '—' : `${val}d`}
-                  </div>
-                  <div className="text-(length:--t-second) text-primary font-mono mt-1">
-                    V{a.version} · {isRtl ? h.ar : h.en}
-                    {t.value === 'forecast' && approvedEvmPlanned && (
-                      <> · EV Planned V{approvedEvmPlanned.version}</>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="val text-muted-foreground">—</div>
-                  <div className="text-(length:--t-second) text-muted-foreground mt-1">
-                    {t.value === 'forecast'
-                      ? (approvedEvmPlanned
-                          ? (isRtl
-                              ? `مرتبط بـ EV Planned V${approvedEvmPlanned.version} (قراءة تلقائية)`
-                              : `Linked to EV Planned V${approvedEvmPlanned.version} (auto-read)`)
-                          : (isRtl ? 'لا توجد نسخة EVM معتمدة بعد' : 'No approved EVM version yet'))
-                      : (isRtl ? 'لا يوجد خط أساس' : 'No baseline')}
-                  </div>
-                </>
-              )}
-            </button>
-          );
-        })}
+      {/* ── Family selector — replaced the old coverage card strip (the
+          "cards that don't read"). The contract family is GONE: the
+          contract is versioned as a source and lives in the Contract tab. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {BASELINE_TYPES.map(t => (
+          <button
+            key={t.value}
+            onClick={() => setActiveType(t.value)}
+            className={cn(
+              'btn btn-sm',
+              activeType === t.value ? 'btn-primary' : 'btn-secondary',
+            )}
+          >
+            {isRtl ? t.ar : t.en}
+          </button>
+        ))}
       </div>
 
       {/* ── BASELINE UPDATE REQUIRED ────────────────────────────────────

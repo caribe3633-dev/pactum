@@ -4,7 +4,7 @@ import { useTranslation } from '../lib/i18n';
 import { formatCompactNumber, formatPercent, cn } from '../lib/utils';
 import {
   ClipboardList, Wallet, Landmark, Gauge, Clock,
-  FileWarning, FileText, ShieldAlert, Receipt, HardHat, Archive, Layers, BookOpen,
+  FileWarning, FileText, ShieldAlert, Receipt, HardHat, Archive, Layers, BookOpen, FileSignature,
 } from 'lucide-react';
 import { findCompanyById } from '../mock/companies';
 import { fetchSectors } from '../mock/sectors';
@@ -12,6 +12,7 @@ import { fetchSectors } from '../mock/sectors';
 import { readCurrencySettings } from '../lib/currency';
 import { contractCurrencyOf } from '../lib/projectCurrency';
 import OverviewModule from '../components/modules/OverviewModule';
+import ContractModule from '../components/modules/ContractModule';
 import CashFlowModule from '../components/modules/CashFlowModule';
 import BudgetModule from '../components/modules/BudgetModule';
 import EVMModule from '../components/modules/EVMModule';
@@ -32,6 +33,7 @@ import LoadSampleData from '../components/LoadSampleData';
 
 const TABS = [
   { id: 'overview',  icon: ClipboardList, en: 'Overview',           ar: 'نظرة عامة' },
+  { id: 'contract',  icon: FileSignature, en: 'Contract',           ar: 'العقد' },
   { id: 'cashflow',  icon: Wallet,         en: 'Cash Flow',          ar: 'التدفق النقدي' },
   { id: 'budget',    icon: Landmark,       en: 'Budget',             ar: 'الموازنة' },
   { id: 'evm',       icon: Gauge,          en: 'Earned Value',       ar: 'القيمة المكتسبة' },
@@ -138,6 +140,7 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
     const props = { project, canEdit };
     switch (activeTab) {
       case 'overview':  return <OverviewModule  {...props} />;
+      case 'contract':  return <ContractModule  {...props} />;
       case 'cashflow':  return <CashFlowModule  {...props} />;
       case 'budget':    return <BudgetModule    {...props} />;
       case 'evm':       return <EVMModule       {...props} />;

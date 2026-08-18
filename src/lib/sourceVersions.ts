@@ -74,12 +74,12 @@ import type { ModuleKey, Role } from './authz';
 
 // ── Shapes ─────────────────────────────────────────────────────────────
 
-/** The five sources a Baseline Package is assembled from. Closed set. */
+/** The six sources a Baseline Package is assembled from. Closed set. */
 export type SourceKind =
-  | 'budget' | 'cashflow' | 'evm-planned' | 'claims' | 'change-orders';
+  | 'contract' | 'budget' | 'cashflow' | 'evm-planned' | 'claims' | 'change-orders';
 
 export const SOURCE_KINDS: SourceKind[] =
-  ['budget', 'cashflow', 'evm-planned', 'claims', 'change-orders'];
+  ['contract', 'budget', 'cashflow', 'evm-planned', 'claims', 'change-orders'];
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -107,6 +107,7 @@ export const SOURCE_KINDS: SourceKind[] =
  * ══════════════════════════════════════════════════════════════════════
  */
 export const EMPTY_IS_A_STATEMENT: Record<SourceKind, boolean> = {
+  'contract':      false,  // empty = no contract data entered yet
   'budget':        false,  // empty = the cost plan is missing
   'cashflow':      false,  // empty = the funding plan is missing
   'evm-planned':   false,  // empty = no planned-value calendar exists
@@ -116,6 +117,7 @@ export const EMPTY_IS_A_STATEMENT: Record<SourceKind, boolean> = {
 
 export const SOURCE_LABELS: Record<SourceKind, { en: string; ar: string }> = {
   'budget':        { en: 'Budget',         ar: 'الموازنة' },
+  'contract':      { en: 'Contract',       ar: 'العقد' },
   'cashflow':      { en: 'Cash Flow',      ar: 'التدفق النقدي' },
   'evm-planned':   { en: 'EVM Planned',    ar: 'القيمة المكتسبة المخططة' },
   'claims':        { en: 'Claims',         ar: 'المطالبات' },
@@ -256,6 +258,9 @@ export const SRCVER_KEY = (projectId: string) => `pactum-srcver-${projectId}`;
 
 /** Which live register each source is captured from. */
 export const LIVE_KEY: Record<SourceKind, (p: string) => string> = {
+  // The contract's live register is the PROJECT RECORD inside the shared
+  // projects store — readLiveSource special-cases it to extract one project.
+  'contract':      () => 'pactum-projects',
   'budget':        p => `pactum-budget-${p}`,
   'cashflow':      p => `pactum-cashflow-${p}`,
   'evm-planned':   p => `pactum-evm-${p}`,
@@ -265,6 +270,7 @@ export const LIVE_KEY: Record<SourceKind, (p: string) => string> = {
 
 /** Audit module each source reports under. Reuses the existing keys. */
 const AUDIT_MODULE: Record<SourceKind, ModuleKey> = {
+  'contract': 'baseline',
   'budget': 'budget',
   'cashflow': 'cashflow',
   'evm-planned': 'evm',
@@ -506,7 +512,41 @@ export function versionLabel(v: { version: number; revision?: number }): string 
  * what was there; interpreting it here would mean the snapshot and the
  * screen could disagree about what "the budget" was.
  */
+/**
+ * CONTRACT live read — the contract's "register" is the project record
+ * itself, inside the shared projects store. Extracts only the commercial
+ * identity fields a contract baseline freezes. Returns null when the
+ * project has no contract data at all (blocked as an empty snapshot).
+ */
+function readContractLive(projectId: string): unknown {
+  try {
+    const raw = localStorage.getItem('pactum-projects');
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return null;
+    const p = arr.find((x: any) => x && x.id === projectId);
+    if (!p) return null;
+    const snap = {
+      code: typeof p.code === 'string' ? p.code : '',
+      nameEn: typeof p.nameEn === 'string' ? p.nameEn : '',
+      contractValue: typeof p.contractValue === 'number' ? p.contractValue : null,
+      commencementDate: typeof p.commencementDate === 'string' && p.commencementDate ? p.commencementDate : null,
+      contractualCompletion: typeof p.contractualCompletion === 'string' && p.contractualCompletion ? p.contractualCompletion : null,
+      approvedCompletion: typeof p.approvedCompletion === 'string' && p.approvedCompletion ? p.approvedCompletion : null,
+    };
+    const hasAnything =
+      snap.contractValue !== null ||
+      snap.commencementDate !== null ||
+      snap.contractualCompletion !== null;
+    return hasAnything ? snap : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readLiveSource(projectId: string, kind: SourceKind): unknown {
+  // The contract lives in the shared projects store, not a per-project key.
+  if (kind === 'contract') return readContractLive(projectId);
   try {
     const raw = localStorage.getItem(LIVE_KEY[kind](projectId));
     if (raw === null) return kind === 'evm-planned' ? null : [];

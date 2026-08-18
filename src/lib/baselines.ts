@@ -98,7 +98,9 @@ export type BaselineType = 'contract' | 'budget' | 'cashflow' | 'schedule' | 'fo
 export type BaselineStatus = 'draft' | 'active' | 'superseded' | 'rejected';
 
 export const BASELINE_TYPES: { value: BaselineType; en: string; ar: string }[] = [
-  { value: 'contract', en: 'Contract Baseline', ar: 'خط الأساس التعاقدي' },
+  // 'contract' moved OUT of the baseline families: the contract is now a
+  // VERSIONED SOURCE (like Budget/Claims/Change Orders) with its own tab
+  // and approval line — see src/lib/sourceVersions.ts SourceKind 'contract'.
   { value: 'budget',   en: 'Budget Baseline',   ar: 'خط أساس الموازنة' },
   { value: 'cashflow', en: 'Cash Flow Baseline',ar: 'خط أساس التدفق النقدي' },
   { value: 'schedule', en: 'Schedule Baseline', ar: 'خط أساس البرنامج الزمني' },
@@ -1396,6 +1398,9 @@ export interface RegisterRow {
 
 export function registerRows(store: BaselineStore, lang: 'en' | 'ar' = 'en'): RegisterRow[] {
   return store.baselines
+    // Contract rows are legacy: the contract is versioned as a SOURCE now,
+    // so its old family rows stay in storage but no longer clutter the register.
+    .filter(b => b.type !== 'contract')
     .slice()
     .sort((a, b) =>
       a.type.localeCompare(b.type) || a.version - b.version)
