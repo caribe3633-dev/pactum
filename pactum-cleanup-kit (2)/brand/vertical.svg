@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 116" width="600" height="348"><g transform="translate(68 0)"><g fill="none" stroke="#d4af37" stroke-linejoin="round" stroke-linecap="round">
+<path d="M32 3 L57 17.5 L57 46.5 L32 61 L7 46.5 L7 17.5 Z" stroke-width="2.0"/>
+<path d="M32 9.5 L51.5 20.75 L51.5 43.25 L32 54.5 L12.5 43.25 L12.5 20.75 Z" stroke-width="1.0" opacity=".45"/>
+<path d="M32 19 L45 26.5 L32 34 L19 26.5 Z" stroke-width="2.0" fill="#d4af37" fill-opacity=".16"/>
+<path d="M19 26.5 L32 34 L32 48 L19 40.5 Z" stroke-width="2.0" fill="#d4af37" fill-opacity=".07"/>
+<path d="M45 26.5 L45 40.5 L32 48 L32 34 Z" stroke-width="2.0" fill="#d4af37" fill-opacity=".28"/>
+<g stroke-width="0.9" opacity=".75"><path d="M35.5 39.4 L41.8 35.8"/><path d="M35.5 43.4 L41.8 39.8"/></g>
+<g stroke-width="0.9" opacity=".6"><path d="M22.6 32.2 L22.6 38.6"/><path d="M27.2 34.8 L27.2 41.2"/></g>
+<g fill="#d4af37" stroke="none">
+<circle cx="32" cy="3" r="2.1"/><circle cx="57" cy="17.5" r="2.1"/><circle cx="57" cy="46.5" r="2.1"/>
+<circle cx="32" cy="61" r="2.1"/><circle cx="7" cy="46.5" r="2.1"/><circle cx="7" cy="17.5" r="2.1"/></g>
+</g></g><text x="100" y="100" fill="#ECEAE5" text-anchor="middle" font-family="IBM Plex Serif,Libre Baskerville,Georgia,serif" font-size="26" font-weight="600" letter-spacing="4.16">PACTUM</text></svg>
