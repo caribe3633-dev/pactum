@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Save, Info } from 'lucide-react';
+import { Save, Info, Plus, Trash2, ExternalLink, FileSignature, Landmark, Clock, CalendarCheck, Link2, FileText } from 'lucide-react';
 import { useTranslation } from '../../lib/i18n';
-import { useProjects } from '../../lib/store';
+import { useProjects, useAuth } from '../../lib/store';
 import { useProjectCurrency } from '../../lib/useProjectCurrency';
 import { commercialTotals } from '../../lib/commercialTotals';
 import { companyIdOfProject } from '../../lib/projectMaster';
@@ -17,7 +17,7 @@ import SourceVersionsPanel from '../SourceVersionsPanel';
  * CONTRACT — the commercial identity of the project, versioned.
  *
  * Contract Value is the ONE number entered by hand here; everything else
- * on this screen is derived:
+ * is derived:
  *   - Contract Amount = original + approved change orders + approved
  *     claims, via commercialTotals() — the exact same engine Overview
  *     uses, so the two screens can never disagree.
@@ -28,6 +28,9 @@ import SourceVersionsPanel from '../SourceVersionsPanel';
  * The contract carries its own baseline approval line (draft → submitted
  * → approved) exactly like Budget, Claims and Change Orders, and the
  * Baseline page reads its approved version as a source.
+ *
+ * CONTRACT DOCUMENTS — an independent register of links (name + URL
+ * only; PACTUM never stores files). Not part of the version snapshot.
  */
 
 /** Same helper Overview uses — identical date arithmetic, no drift. */
@@ -40,10 +43,37 @@ function addDaysToDate(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// ── Contract documents register (independent, links only) ──────────────
+
+interface ContractDoc {
+  id: string;
+  name: string;
+  url: string;
+  addedBy: string;
+  addedAt: string; // ISO
+}
+
+const DOCS_KEY = (projectId: string) => `pactum-contract-docs-${projectId}`;
+
+function readDocs(projectId: string): ContractDoc[] {
+  try {
+    const raw = localStorage.getItem(DOCS_KEY(projectId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDocs(projectId: string, docs: ContractDoc[]): void {
+  localStorage.setItem(DOCS_KEY(projectId), JSON.stringify(docs));
+}
+
 export default function ContractModule({ project, canEdit = true }: { project: Project; canEdit?: boolean }) {
   const { lang } = useTranslation();
   const isRtl = lang === 'ar';
   const { updateProject } = useProjects();
+  const { user } = useAuth();
   const ccy = useProjectCurrency(project).base;
 
   const [draftValue, setDraftValue] = useState<string>('');
@@ -74,7 +104,132 @@ export default function ContractModule({ project, canEdit = true }: { project: P
     setTimeout(() => setSavedFlash(false), 2000);
   };
 
-  const card = 'bg-black/30 px-4 py-3';
+  // ── Documents state ──
+  const [docs, setDocs] = useState<ContractDoc[]>(() => readDocs(project.id));
+  const [docForm, setDocForm] = useState<{ open: boolean; name: string; url: string }>({ open: false, name: '', url: '' });
+  const [docErr, setDocErr] = useState('');
+
+  const openDocForm = () => { setDocForm({ open: true, name: '', url: '' }); setDocErr(''); };
+  const addDoc = () => {
+    const name = docForm.name.trim();
+    const url = docForm.url.trim();
+    if (!name) { setDocErr(isRtl ? 'اسم المستند مطلوب.' : 'Document name is required.'); return; }
+    if (!url || !/^(https?:\/\/|www\.|\/|file:|\\\\|drive:|sharepoint)/i.test(url)) {
+      setDocErr(isRtl ? 'لينك المستند مطلوب (مثال: https://...).' : 'Document link is required (e.g. https://...).');
+      return;
+    }
+    const next = [...docs, {
+      id: `cdoc-${Date.now()}`,
+      name,
+      url,
+      addedBy: user?.username || 'unknown',
+      addedAt: new Date().toISOString(),
+    }];
+    setDocs(next);
+    writeDocs(project.id, next);
+    setDocForm({ open: false, name: '', url: '' });
+    setDocErr('');
+  };
+
+  const removeDoc = (id: string) => {
+    const next = docs.filter(d => d.id !== id);
+    setDocs(next);
+    writeDocs(project.id, next);
+  };
+
+  // KPI cards — built on the SAME tile pattern as the Overview grid:
+  // ds-card-raised + icon + t-metric + uppercase label + Auto/Manual badge.
+  const cards = [
+    {
+      key: 'value',
+      icon: FileSignature,
+      color: 'text-primary',
+      badge: <span className="badge badge-neutral">{isRtl ? 'يدوي' : 'Manual'}</span>,
+      label: isRtl ? 'القيمة التعاقدية' : 'Contract Value',
+      node: (
+        <div>
+          <p className="t-metric" title={exactMoney(project.contractValue, totals.contractCurrency || ccy)}>
+            {project.contractValue !== undefined && project.contractValue !== null
+              ? abbrevMoney(project.contractValue)
+              : '—'}
+          </p>
+          {canEdit && (
+            <div className="mt-1.5">
+              {draftValue === '' ? (
+                <button onClick={startEdit} className="text-(length:--t-label) text-muted-foreground uppercase tracking-widest hover:text-primary transition-colors">
+                  {isRtl ? 'تعديل' : 'Edit'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <input
+                    type="number"
+                    dir="ltr"
+                    className="field-input !py-1 !px-2 font-mono w-32"
+                    value={draftValue}
+                    onChange={e => setDraftValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveValue(); }}
+                  />
+                  <button onClick={saveValue} className="btn btn-primary btn-sm"><Save className="w-3 h-3" />{isRtl ? 'حفظ' : 'Save'}</button>
+                  <button onClick={() => setDraftValue('')} className="btn btn-secondary btn-sm">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                </div>
+              )}
+            </div>
+          )}
+          {savedFlash && <p className="kpi-sub text-(--c-success) mt-1">{isRtl ? 'تم الحفظ ✓' : 'Saved ✓'}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      icon: Landmark,
+      color: 'text-white',
+      badge: <span className="badge badge-ok">{isRtl ? 'تلقائي' : 'Auto'}</span>,
+      label: isRtl ? 'إجمالي العقد' : 'Contract Amount',
+      node: (
+        <div>
+          <p className="t-metric" title={exactMoney(totals.revisedContract, totals.contractCurrency || ccy)}>
+            {abbrevMoney(totals.revisedContract)}
+          </p>
+          <p className="kpi-sub text-muted-foreground mt-1">
+            {isRtl
+              ? `${totals.contractCurrency || ccy} · أصلي ${abbrevMoney(totals.originalContract)} + أوامر تغيير ${abbrevMoney(totals.approvedChangeOrders)} + مطالبات ${abbrevMoney(totals.approvedClaims)}`
+              : `${totals.contractCurrency || ccy} · original ${abbrevMoney(totals.originalContract)} + COs ${abbrevMoney(totals.approvedChangeOrders)} + claims ${abbrevMoney(totals.approvedClaims)}`}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'commencement',
+      icon: Clock,
+      color: 'text-chart-5',
+      badge: <span className="badge badge-ok">{isRtl ? 'مرتبط بالتأخير' : 'Linked'}</span>,
+      label: isRtl ? 'تاريخ المباشرة' : 'Commencement Date',
+      node: (
+        <p className="t-metric font-mono !text-(length:--t-large)">
+          {formatDateOrDash(project.commencementDate || '', isRtl ? 'ar' : 'en')}
+        </p>
+      ),
+    },
+    {
+      key: 'finish',
+      icon: CalendarCheck,
+      color: 'text-chart-3',
+      badge: <span className="badge badge-ok">{isRtl ? 'مرتبط بالتأخير' : 'Linked'}</span>,
+      label: isRtl ? 'الانتهاء المعتمد' : 'Approved Finish',
+      node: (
+        <div>
+          <p className={cn('t-metric font-mono !text-(length:--t-large)', eot.totalApprovedEOT > 0 ? 'kpi-v-warn' : 'kpi-v-ok')}>
+            {formatDateOrDash(approvedFinish, isRtl ? 'ar' : 'en')}
+          </p>
+          <p className="kpi-sub text-muted-foreground mt-1 font-mono">
+            {isRtl
+              ? `تعاقدي + EOT معتمد (${eot.totalApprovedEOT} يوم)`
+              : `contractual + approved EOT (${eot.totalApprovedEOT}d)`}
+          </p>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="pg-stack animate-in fade-in duration-500">
@@ -91,91 +246,133 @@ export default function ContractModule({ project, canEdit = true }: { project: P
         </div>
       </div>
 
-      {/* ── The four cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-px bg-white/5">
-
-        {/* Contract Value — manual entry */}
-        <div className={card}>
-          <div className="lbl mb-1.5">{isRtl ? 'القيمة التعاقدية (يدوي)' : 'Contract Value (manual)'}</div>
-          <div className="val" title={exactMoney(project.contractValue, totals.contractCurrency || ccy)}>
-            {project.contractValue !== undefined && project.contractValue !== null
-              ? abbrevMoney(project.contractValue)
-              : '—'}
-          </div>
-          <div className="text-(length:--t-second) text-muted-foreground mt-1 font-mono">
-            {totals.contractCurrency || ccy}
-          </div>
-          {canEdit && (
-            <div className="mt-2">
-              {draftValue === '' ? (
-                <button onClick={startEdit} className="btn btn-secondary btn-sm">
-                  {isRtl ? 'تعديل القيمة' : 'Edit value'}
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    dir="ltr"
-                    className="field-input !py-1 !px-2 font-mono w-32"
-                    value={draftValue}
-                    onChange={e => setDraftValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveValue(); }}
-                  />
-                  <button onClick={saveValue} className="btn btn-primary btn-sm">
-                    <Save className="w-3 h-3" /> {isRtl ? 'حفظ' : 'Save'}
-                  </button>
-                  <button onClick={() => setDraftValue('')} className="btn btn-secondary btn-sm">
-                    {isRtl ? 'إلغاء' : 'Cancel'}
-                  </button>
-                </div>
-              )}
+      {/* ── KPI grid — same tile design as Overview ── */}
+      <div className="ds-grid">
+        {cards.map(card => (
+          <div key={card.key} className="ds-card ds-card-raised hover:bg-black/40 transition-colors">
+            <div className="flex justify-between items-start !mt-0">
+              <card.icon className={cn('w-5 h-5', card.color, 'opacity-60')} />
+              {card.badge}
             </div>
-          )}
-          {savedFlash && (
-            <p className={cn('text-xs mt-1.5', 'text-success')}>{isRtl ? 'تم الحفظ ✓' : 'Saved ✓'}</p>
-          )}
-        </div>
-
-        {/* Contract Amount — computed exactly like Overview */}
-        <div className={card}>
-          <div className="lbl mb-1.5">{isRtl ? 'إجمالي العقد (محسوب)' : 'Contract Amount (computed)'}</div>
-          <div className="val" title={exactMoney(totals.revisedContract, totals.contractCurrency || ccy)}>
-            {abbrevMoney(totals.revisedContract)}
+            <div className="mb-2">{card.node}</div>
+            <h3 className="text-(length:--t-label) uppercase tracking-wider text-muted-foreground leading-tight">
+              {card.label}
+            </h3>
           </div>
-          <div className="text-(length:--t-second) text-muted-foreground mt-1 font-mono">
-            {isRtl
-              ? `${totals.contractCurrency || ccy} · أصلي ${abbrevMoney(totals.originalContract)} + أوامر تغيير ${abbrevMoney(totals.approvedChangeOrders)} + مطالبات ${abbrevMoney(totals.approvedClaims)}`
-              : `${totals.contractCurrency || ccy} · original ${abbrevMoney(totals.originalContract)} + COs ${abbrevMoney(totals.approvedChangeOrders)} + claims ${abbrevMoney(totals.approvedClaims)}`}
-          </div>
-        </div>
-
-        {/* Commencement Date — linked to delay analysis */}
-        <div className={card}>
-          <div className="lbl mb-1.5">{isRtl ? 'تاريخ المباشرة' : 'Commencement Date'}</div>
-          <div className="val font-mono !text-(length:--t-mid)">
-            {formatDateOrDash(project.commencementDate || '', isRtl ? 'ar' : 'en')}
-          </div>
-          <div className="text-(length:--t-second) text-muted-foreground mt-1">
-            {isRtl ? 'من تحليل التأخير' : 'from Delay Analysis'}
-          </div>
-        </div>
-
-        {/* Approved Finish — contractual completion + approved EOT */}
-        <div className={card}>
-          <div className="lbl mb-1.5">{isRtl ? 'الانتهاء المعتمد' : 'Approved Finish'}</div>
-          <div className="val font-mono !text-(length:--t-mid)">
-            {formatDateOrDash(approvedFinish, isRtl ? 'ar' : 'en')}
-          </div>
-          <div className="text-(length:--t-second) text-muted-foreground mt-1 font-mono">
-            {isRtl
-              ? `التعاقدي + EOT معتمد (${eot.totalApprovedEOT} يوم)`
-              : `contractual + approved EOT (${eot.totalApprovedEOT}d)`}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* ── The contract approval line — same versioning as Budget/Claims/COs ── */}
       <SourceVersionsPanel projectId={project.id} only="contract" canEdit={canEdit} compact />
+
+      {/* ── Contract documents — independent register of links ── */}
+      <div className="ds-card">
+        <div className="flex items-center justify-between gap-4 flex-wrap !mt-0">
+          <h3 className="sec-head !mb-0">
+            <FileText className="w-4 h-4 inline-block me-2 text-primary/70" />
+            {isRtl ? 'المستندات التعاقدية' : 'Contract Documents'}
+          </h3>
+          {canEdit && !docForm.open && (
+            <button onClick={openDocForm} className="btn btn-primary btn-sm">
+              <Plus className="w-3 h-3" />
+              {isRtl ? 'إضافة مستند تعاقدي' : 'Add Contract Document'}
+            </button>
+          )}
+        </div>
+
+        {canEdit && docForm.open && (
+          <div className="form-grid">
+            <div className="field">
+              <label className="field-label" data-required>{isRtl ? 'اسم المستند' : 'Document name'}</label>
+              <input
+                className="field-input"
+                value={docForm.name}
+                onChange={e => setDocForm({ ...docForm, name: e.target.value })}
+                placeholder={isRtl ? 'مثال: اتفاقية العقد — الموقع' : 'e.g. Contract Agreement — signed'}
+                onKeyDown={e => { if (e.key === 'Enter') addDoc(); }}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" data-required>{isRtl ? 'لينك المستند' : 'Document link'}</label>
+              <input
+                className="field-input font-mono"
+                dir="ltr"
+                value={docForm.url}
+                onChange={e => setDocForm({ ...docForm, url: e.target.value })}
+                placeholder="https://..."
+                onKeyDown={e => { if (e.key === 'Enter') addDoc(); }}
+              />
+            </div>
+          </div>
+        )}
+        {canEdit && docForm.open && (
+          <div className="flex items-center gap-2 mt-3">
+            <button onClick={addDoc} className="btn btn-primary btn-sm">
+              <Plus className="w-3 h-3" /> {isRtl ? 'إضافة' : 'Add'}
+            </button>
+            <button onClick={() => { setDocForm({ open: false, name: '', url: '' }); setDocErr(''); }} className="btn btn-secondary btn-sm">
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </button>
+            {docErr && <p className="text-(length:--t-second) text-(--c-destructive)">{docErr}</p>}
+          </div>
+        )}
+
+        {docs.length === 0 ? (
+          <p className="text-(length:--t-second) text-muted-foreground italic">
+            {isRtl
+              ? 'لا توجد مستندات بعد — اتفافية العقد، المخططات، المواصفات، عرض السعر، جدول الكميات… أول مستند بيبدأ السجل.'
+              : 'No documents yet — contract agreement, drawings, specifications, quotation, BOQ… the first one starts the register.'}
+          </p>
+        ) : (
+          <div className="ds-table-wrap">
+            <table className="ds-table">
+              <thead>
+                <tr>
+                  <th className="col-pin">{isRtl ? 'المستند' : 'Document'}</th>
+                  <th>{isRtl ? 'اللينك' : 'Link'}</th>
+                  <th>{isRtl ? 'أضافه' : 'Added By'}</th>
+                  <th>{isRtl ? 'التاريخ' : 'Date'}</th>
+                  {canEdit && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {docs.map(d => (
+                  <tr key={d.id}>
+                    <td className="col-pin text-white">{d.name}</td>
+                    <td>
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-primary hover:underline font-mono text-(length:--t-second)"
+                        dir="ltr"
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        {d.url.length > 48 ? d.url.slice(0, 45) + '…' : d.url}
+                      </a>
+                    </td>
+                    <td className="text-muted-foreground">{d.addedBy}</td>
+                    <td className="text-muted-foreground font-mono whitespace-nowrap">
+                      {formatDateOrDash(d.addedAt.slice(0, 10), isRtl ? 'ar' : 'en')}
+                    </td>
+                    {canEdit && (
+                      <td>
+                        <button
+                          onClick={() => removeDoc(d.id)}
+                          className="btn btn-secondary btn-sm"
+                          aria-label={isRtl ? 'حذف' : 'Delete'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

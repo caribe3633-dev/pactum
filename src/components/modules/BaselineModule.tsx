@@ -13,6 +13,7 @@ import { fetchSectors } from '../../mock/sectors';
 import ReportButton from '../reporting/ReportButton';
 import {
   Layers, Lock, Plus, GitCompare, Info, Check, Ban, AlertTriangle, History,
+  FileSignature, Landmark, Wallet, Gauge, FileText, FileWarning,
 } from 'lucide-react';
 
 // Existing engines — READ ONLY. This module captures their published
@@ -65,6 +66,15 @@ import {
  */
 
 /** Headline field per family, for the drift chart and the register. */
+const SOURCE_ICONS: Record<string, { icon: any; color: string }> = {
+  'contract':      { icon: FileSignature, color: 'text-primary' },
+  'budget':        { icon: Landmark,      color: 'text-white' },
+  'cashflow':      { icon: Wallet,        color: 'text-chart-5' },
+  'evm-planned':   { icon: Gauge,         color: 'text-chart-4' },
+  'claims':        { icon: FileText,      color: 'text-chart-3' },
+  'change-orders': { icon: FileWarning,   color: 'text-white' },
+};
+
 const HEADLINE: Record<BaselineType, { field: string; en: string; ar: string; money: boolean }> = {
   // Contract Amount = Contract Value + approved COs + approved claims.
   contract: { field: 'currentContract',      en: 'Contract Amount',  ar: 'إجمالي قيمة العقد', money: true },
@@ -468,43 +478,48 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                     ? 'لم تُعتمد أي حزمة بعد — ولهذا تظهر موازنة الإنجاز (BAC) غير متاحة في القيمة المكتسبة.'
                     : 'No package approved yet — which is why Earned Value reports BAC as unavailable.')}
             </p>
-            {/* ── Source approval cards (auto-read) — replaced the old
-                "Built from" / "Latest approved" text lines. Green means
-                approved with nothing pending; red means action needed. */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-px bg-white/5 mt-3">
+            {/* ── Source approval cards (auto-read) — same KPI tile design
+                as the Overview grid. Green badge = approved with nothing
+                pending; red badge = action needed. */}
+            <div className="ds-grid mt-3">
               {sourceCards.map(s => {
                 const ok = !s.openVersion && s.approvedVersion !== null;
-                const tone = ok ? 'text-success' : 'text-chart-3';
+                const meta = SOURCE_ICONS[s.kind] ?? { icon: History, color: 'text-muted-foreground' };
+                const Icon = meta.icon;
+                const badge = ok
+                  ? <span className="badge badge-ok">{isRtl ? 'معتمدة ✓' : 'Approved ✓'}</span>
+                  : s.openStatus === 'submitted'
+                  ? <span className="badge badge-risk">{isRtl ? 'تنتظر الاعتماد' : 'Awaiting'}</span>
+                  : s.openStatus === 'draft'
+                  ? <span className="badge badge-risk">{isRtl ? 'مسودة' : 'Draft'}</span>
+                  : <span className="badge badge-risk">{isRtl ? 'لا نسخة' : 'No version'}</span>;
+                const version = s.approvedVersion !== null
+                  ? `V${s.approvedVersion}`
+                  : s.openVersion !== null
+                  ? `V${s.openVersion}`
+                  : '—';
+                const detail = s.openStatus === 'submitted'
+                  ? (isRtl ? `مُقدَّمة V${s.openVersion} — تنتظر قرار الاعتماد` : `V${s.openVersion} submitted — awaiting approval`)
+                  : s.openStatus === 'draft'
+                  ? (isRtl ? `مسودة V${s.openVersion} — تحتاج مراجعة وإرسالًا` : `Draft V${s.openVersion} — needs review`)
+                  : ok
+                  ? (isRtl ? 'معتمدة وتقرأ تلقائيًا في الحزمة' : 'approved — auto-read by the package')
+                  : (isRtl ? 'لا توجد نسخة بعد' : 'No version yet');
                 return (
-                  <div
-                    key={s.kind}
-                    className={cn(
-                      'px-3 py-2.5',
-                      ok
-                        ? 'bg-success/[0.06] ring-1 ring-inset ring-success/20'
-                        : 'bg-chart-3/[0.06] ring-1 ring-inset ring-chart-3/20',
-                    )}
-                  >
-                    <div className={cn('lbl mb-1 flex items-center gap-1.5', tone)}>
-                      <span className={cn('w-1.5 h-1.5 rounded-full inline-block', ok ? 'bg-success' : 'bg-chart-3')} />
+                  <div key={s.kind} className="ds-card ds-card-raised hover:bg-black/40 transition-colors">
+                    <div className="flex justify-between items-start !mt-0">
+                      <Icon className={cn('w-5 h-5', meta.color, 'opacity-60')} />
+                      {badge}
+                    </div>
+                    <div className="mb-2">
+                      <p className={cn('t-metric', ok ? 'kpi-v-ok' : 'text-(--c-destructive)')}>
+                        {version}
+                      </p>
+                    </div>
+                    <h3 className="text-(length:--t-label) uppercase tracking-wider text-muted-foreground leading-tight">
                       {isRtl ? SOURCE_LABELS[s.kind].ar : SOURCE_LABELS[s.kind].en}
-                    </div>
-                    <div className={cn('val font-mono', tone)}>
-                      {s.approvedVersion !== null
-                        ? `V${s.approvedVersion}`
-                        : s.openVersion !== null
-                        ? `V${s.openVersion}`
-                        : '—'}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {s.openStatus === 'submitted'
-                        ? (isRtl ? `مُقدَّمة V${s.openVersion} — تنتظر الاعتماد` : `V${s.openVersion} submitted — awaiting approval`)
-                        : s.openStatus === 'draft'
-                        ? (isRtl ? `مسودة V${s.openVersion} — تحتاج مراجعة وإرسالًا` : `Draft V${s.openVersion} — needs review`)
-                        : ok
-                        ? (isRtl ? 'معتمدة ✓' : 'Approved ✓')
-                        : (isRtl ? 'لا توجد نسخة بعد' : 'No version yet')}
-                    </div>
+                    </h3>
+                    <p className="kpi-sub text-muted-foreground mt-1">{detail}</p>
                   </div>
                 );
               })}
