@@ -1,1 +1,1 @@
-Indirect EV fix: time is earned as it passes — the current period is measured at today (not its future end) and unstarted future periods earn zero, filling in when their month arrives; no more zeroed last periods
+Indirect EV final formula: indirectBac x the month own share (period days / effective approved duration). Each month independent, future months carry their slice, no zeros at the end, no cumulative percentages

@@ -1569,24 +1569,61 @@ export function hasSplit(p: EvmPeriod | null | undefined): boolean {
 }
 
 /**
+ * Class-level metrics. Rule 12: TOTAL METRICS COME FROM TOTAL AGGREGATES.
+ *
+ * v3: every class figure here is CUMULATIVE \u2014 the running sum of that
+ * class's per-period components from project start through the reporting
+ * period, matching the cumulative parent totals.
+ *
+ * Total CPI is EV_total / AC_total \u2014 never the average of Direct CPI and
+ * Indirect CPI, which would weight a tiny class equally with a huge one.
+ */
+export interface ClassMetrics {
+  direct: EvmMetrics;
+  indirect: EvmMetrics;
+  total: EvmMetrics;
+  /** False when BAC has no approved baseline behind it. */
+  bacAvailable: boolean;
+  /** True when the indirect time basis could not be determined. */
+  indirectBlocked: boolean;
+}
+
+export function classMetrics(
+  periods: EvmPeriod[], upTo: EvmPeriod, bac: BacSplit, method: EacMethod = 'cpi',
+): ClassMetrics {
+  const idx2 = periods.findIndex(p => p.id === upTo.id);
+  const hist = idx2 >= 0 ? periods.slice(0, idx2 + 1) : [upTo];
+  const sumOf = (k: 'directPv' | 'indirectPv' | 'directEv' | 'indirectEv' | 'directAc' | 'indirectAc') =>
+    hist.reduce((a, p) => a + num(p[k]), 0);
+
+  const dPv = sumOf('directPv'), iPv = sumOf('indirectPv');
+  const dEv = sumOf('directEv'), iEv = sumOf('indirectEv');
+  const dAc = sumOf('directAc'), iAc = sumOf('indirectAc');
+
+  return {
+    direct:   metricsFor(dPv, dEv, dAc, bac.directBac, method),
+    indirect: metricsFor(iPv, iEv, iAc, bac.indirectBac, method),
+    total:    metricsFor(dPv + iPv, dEv + iEv, dAc + iAc, bac.totalBac, method),
+    bacAvailable: bac.available,
+    indirectBlocked: upTo.indirectEvBasis === null,
+  };
+}
+
+/**
  * STEP 12 rule 5 — INDIRECT EV IS TIME-BASED, NEVER TYPED.
  *
- *   indirectEvBasis = timePlannedPercent (CUMULATIVE elapsed fraction at
- *                     the period's own end — kept as the audit basis)
- *   indirectEv      = (basis − previous period's basis) × indirectBac
+ *   indirectEv = indirectBac \u00d7 \u0646\u0633\u0628\u0629 \u0627\u0644\u0634\u0647\u0631 \u0627\u0644\u0646\u0641\u0633\u0647
  *
- * v3 FIX: `pct` is CUMULATIVE by construction (elapsed ÷ duration), but the
- * stored component must be THAT PERIOD'S OWN value — the increment between
- * two consecutive bases — because `deriveClassTotals` builds the parent
- * cumulative EV by SUMMING components across periods. Storing the raw
- * cumulative figure here double-counted it once per period. The delta is
- * clamped at zero: an EOT that stretches the duration never "un-earns" a
- * past month.
+ * OWNER'S RULE (final): the pct passed in is THAT PERIOD'S OWN share of
+ * the effective approved duration (period days \u00f7 durationDays) \u2014 never a
+ * cumulative fraction, never a delta. Every period stands alone with its
+ * slice, future months included (their slice is defined, not zero), and
+ * the parent cumulative EV sums the slices exactly like Direct components.
+ * `indirectEvBasis` keeps the month's share for audit.
  *
- * `pct` must come from the effective APPROVED schedule. A null pct means
- * the basis is unknowable — an approved EOT with no effective date — and
- * the period is left UNTOUCHED rather than given a fabricated value.
- * Approved and frozen periods are never rewritten: history stands.
+ * A null pct means the share is unknowable (an approved EOT with no
+ * effective date) and the period is left UNTOUCHED rather than given a
+ * fabricated value. Approved and frozen periods are never rewritten.
  */
 export function applyIndirectEv(
   store: EvmStore, periodId: string, pct: number | null, indirectBac: number,
@@ -1603,75 +1640,16 @@ export function applyIndirectEv(
     return { ...store, periods };
   }
 
-  // The PREVIOUS cumulative basis (0 before the first period). Summing the
-  // per-period deltas reproduces the cumulative curve exactly.
-  let prevBasis = 0;
-  for (let k = i - 1; k >= 0; k--) {
-    const b = store.periods[k].indirectEvBasis;
-    if (typeof b === 'number' && Number.isFinite(b)) { prevBasis = b; break; }
-  }
-  const cumulative = Math.max(0, Math.min(1, pct));
-  const value = Math.max(0, cumulative - prevBasis) * num(indirectBac);
+  const share = Math.max(0, Math.min(1, pct));
+  const value = share * num(indirectBac);
   if (p.indirectEv === value && p.indirectEvBasis === pct) return store;
 
   const next: EvmPeriod = { ...p, indirectEv: value, indirectEvBasis: pct };
-  // v3: indirect EV is a per-period figure — the parent cumulative EV is
-  // re-derived across the whole calendar, not patched in place.
   const periods = store.periods.slice();
   periods[i] = next;
   return { ...store, periods: deriveClassTotals(periods) };
 }
 
-/**
- * Class-level metrics. Rule 12: TOTAL METRICS COME FROM TOTAL AGGREGATES.
- *
- * v3: every class figure here is CUMULATIVE — the running sum of that
- * class's per-period components from project start through the reporting
- * period, matching the cumulative parent totals. (The old version read a
- * single period's components, which understated both classes whenever
- * more than one period had been entered.)
- *
- * Total CPI is EV_total / AC_total — never the average of Direct CPI and
- * Indirect CPI, which would weight a tiny class equally with a huge one.
- * `metricsFor` is reused verbatim so the formulas stay identical across
- * all three levels. No EVM formula was rewritten.
- */
-export interface ClassMetrics {
-  direct: EvmMetrics;
-  indirect: EvmMetrics;
-  total: EvmMetrics;
-  /** False when BAC has no approved baseline behind it. */
-  bacAvailable: boolean;
-  /** True when the indirect time basis could not be determined. */
-  indirectBlocked: boolean;
-}
-
-export function classMetrics(
-  periods: EvmPeriod[], upTo: EvmPeriod, bac: BacSplit, method: EacMethod = 'cpi',
-): ClassMetrics {
-  const idx = periods.findIndex(p => p.id === upTo.id);
-  const hist = idx >= 0 ? periods.slice(0, idx + 1) : [upTo];
-  const sumOf = (k: 'directPv' | 'indirectPv' | 'directEv' | 'indirectEv' | 'directAc' | 'indirectAc') =>
-    hist.reduce((a, p) => a + num(p[k]), 0);
-
-  const dPv = sumOf('directPv'), iPv = sumOf('indirectPv');
-  const dEv = sumOf('directEv'), iEv = sumOf('indirectEv');
-  const dAc = sumOf('directAc'), iAc = sumOf('indirectAc');
-
-  return {
-    direct:   metricsFor(dPv, dEv, dAc, bac.directBac, method),
-    indirect: metricsFor(iPv, iEv, iAc, bac.indirectBac, method),
-    // Rule 12 — totals are sums, then metrics. Not averaged metrics.
-    total:    metricsFor(dPv + iPv, dEv + iEv, dAc + iAc, bac.totalBac, method),
-    bacAvailable: bac.available,
-    indirectBlocked: upTo.indirectEvBasis === null,
-  };
-}
-
-/**
- * Sets a non-numeric reporting field: notes, issues, risks, progress,
- * attachments. Refused on a frozen period, exactly like the money fields.
- */
 export function setPeriodField(
   store: EvmStore, periodId: string,
   field: 'physicalProgress' | 'notes' | 'issues' | 'risks' | 'attachments',

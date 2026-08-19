@@ -81,81 +81,54 @@ describe('EVM cumulative split — regression tests (v3)', () => {
   });
 });
 
-describe('applyIndirectEv — v3 fix: per-month increments, no double counting', () => {
-  const PID2 = 'cum-indirect-1';
-  const P2: ProjectLike = {
-    id: PID2, contractValue: 1_000_000, progress: 30,
+
+describe('applyIndirectEv - month own share (not cumulative, not delta)', () => {
+  const PID3 = 'ind-month-1';
+  const P3: ProjectLike = {
+    id: PID3, contractValue: 1_000_000, progress: 30,
     commencementDate: '2026-01-01', plannedDurationDays: 365,
     contractualCompletion: '2026-12-31',
   };
-
-  function per(n: number): EvmPeriod {
+  function mper(n: number): EvmPeriod {
     return {
-      id: `q${n}`, seq: n, start: `2026-${String(n).padStart(2, '0')}-01`,
+      id: `m${n}`, seq: n, start: `2026-${String(n).padStart(2, '0')}-01`,
       end: `2026-${String(n).padStart(2, '0')}-28`, label: `M${n} 2026`,
       pv: 0, ev: 0, ac: 0, pvSource: 'manual', evSource: 'auto', acSource: 'auto',
       status: 'draft',
     } as EvmPeriod;
   }
+  const BAC_IND = 400_000;
 
-  it('6️⃣ القيم المخزنة زيادات شهرية — مجموعها = المنحنى التراكمي بالظبط', async () => {
+  it("6: each month earns ITS OWN share - independent, no deltas, no cumulative", async () => {
     const { applyIndirectEv } = await import('@/lib/evm');
-    const BAC_IND = 400_000;
-    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2), per(3)] };
-    // نسب تراكمية زي ما timePlannedPercent بيرجعها: 10% ثم 25% ثم 40%
-    st = applyIndirectEv(st, 'q1', 0.10, BAC_IND);
-    st = applyIndirectEv(st, 'q2', 0.25, BAC_IND);
-    st = applyIndirectEv(st, 'q3', 0.40, BAC_IND);
-    expect(st.periods[0].indirectEv).toBe(40_000);       // 10% × 400K
-    expect(st.periods[1].indirectEv).toBeCloseTo(60_000, 6);
-    expect(st.periods[2].indirectEv).toBeCloseTo(60_000, 6);
-    // المجموع التراكمي = 40% × 400K = 160K (مش 40+100+160=300K زي الغلطة القديمة)
-    const total = st.periods.reduce((a: number, p: any) => a + (p.indirectEv ?? 0), 0);
-    expect(total).toBeCloseTo(160_000, 6);
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [mper(1), mper(2), mper(3)] };
+    st = applyIndirectEv(st, 'm1', 0.08, BAC_IND);
+    st = applyIndirectEv(st, 'm2', 0.08, BAC_IND);
+    st = applyIndirectEv(st, 'm3', 0.09, BAC_IND);
+    expect(st.periods[0].indirectEv).toBeCloseTo(32_000, 6);
+    expect(st.periods[1].indirectEv).toBeCloseTo(32_000, 6);
+    expect(st.periods[2].indirectEv).toBeCloseTo(36_000, 6);
   });
 
-  it('7️⃣ EOT بيمدد المدة → الفرق السالب بيتقص بصفر (مفيش استرجاع شهور فاتت)', async () => {
+  it("7: future months carry their slice - the last period is never zero", async () => {
     const { applyIndirectEv } = await import('@/lib/evm');
-    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2)] };
-    st = applyIndirectEv(st, 'q1', 0.30, 400_000);
-    st = applyIndirectEv(st, 'q2', 0.20, 400_000); // النسبة التراكمية نزلت بعد التمديد
-    expect(st.periods[0].indirectEv).toBe(120_000);
-    expect(st.periods[1].indirectEv).toBe(0); // max(0, 20% − 30%) = 0
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [mper(1), mper(12)] };
+    st = applyIndirectEv(st, 'm1', 0.08, BAC_IND);
+    st = applyIndirectEv(st, 'm12', 0.09, BAC_IND);
+    expect(st.periods[1].indirectEv).toBeCloseTo(36_000, 6);
+    expect(st.periods[1].indirectEvBasis).toBeCloseTo(0.09, 6);
   });
 
-  it('8️⃣ الإجمالي التراكمي للفترة من مجموع الزيادات (اتساق كامل مع deriveClassTotals)', async () => {
-    const { applyIndirectEv, readEvm, writeEvm } = await import('@/lib/evm');
+  it("8: cumulative EV sums the slices exactly like Direct components", async () => {
+    const { applyIndirectEv, writeEvm, readEvm } = await import('@/lib/evm');
     localStorage.clear();
-    localStorage.setItem('pactum-projects', JSON.stringify([P2]));
-    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2)] };
-    st = applyIndirectEv(st, 'q1', 0.10, 400_000);
-    st = applyIndirectEv(st, 'q2', 0.30, 400_000);
-    writeEvm(PID2, st);
-    const s = readEvm(PID2);
-    expect(s.periods[0].ev).toBe(40_000);
-    expect(s.periods[1].ev).toBe(120_000); // 40K + 80K = 30% × 400K ✓
-  });
-});
-
-
-describe('Indirect EV - time earned as it passes (future periods earn zero)', () => {
-  it("9: future period earns ZERO; the current period is measured at today, not its end", async () => {
-    const { applyIndirectEv } = await import('@/lib/evm');
-    const BAC_IND = 400_000;
-    // M1 خلص (basis 0.40) - M2 الحالية (النهاردة = 0.45) - M3 مستقبلية
-    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2), per(3)] };
-    st = applyIndirectEv(st, 'p1', 0.40, BAC_IND);
-    st = applyIndirectEv(st, 'p2', 0.45, BAC_IND);   // مقيسة بالنهاردة مش بنهايتها
-    st = applyIndirectEv(st, 'p3', 0, BAC_IND);      // مستقبلية = صفر
-    expect(st.periods[0].indirectEv).toBeCloseTo(160_000, 6);
-    expect(st.periods[1].indirectEv).toBeCloseTo(20_000, 6);   // 5% بس - اللي اكتسب فعلاً
-    expect(st.periods[2].indirectEv).toBe(0);
-    expect(st.periods[2].indirectEvBasis).toBe(0);
-    // الإجمالي التراكمي عند الفترة الحالية = 45% × 400K (مش منحنى كامل مبالغ)
-    const cum2 = st.periods.slice(0, 2).reduce((a: number, x: any) => a + (x.indirectEv ?? 0), 0);
-    expect(cum2).toBeCloseTo(180_000, 6);
-    // ولما M3 توصل شهرها فعلاً وتتعاد بأساس حقيقي - بتكتسب الفرق الطبيعي
-    st = applyIndirectEv(st, 'p3', 0.60, BAC_IND);
-    expect(st.periods[2].indirectEv).toBeCloseTo(60_000, 6);
+    localStorage.setItem('pactum-projects', JSON.stringify([P3]));
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [mper(1), mper(2)] };
+    st = applyIndirectEv(st, 'm1', 0.10, BAC_IND);
+    st = applyIndirectEv(st, 'm2', 0.15, BAC_IND);
+    writeEvm(PID3, st);
+    const s2 = readEvm(PID3);
+    expect(s2.periods[0].ev).toBeCloseTo(40_000, 6);
+    expect(s2.periods[1].ev).toBeCloseTo(100_000, 6);
   });
 });

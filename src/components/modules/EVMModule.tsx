@@ -8,7 +8,7 @@ import { formatDateOrDash } from '../../lib/dateFormat';
 import { useAuth } from '../../lib/store';
 import ReportButton from '../reporting/ReportButton';
 // SPRINT 3 · R6 — one source for approved EOT.
-import { computeApprovedEOT } from '../../lib/delayCalculations';
+import { computeApprovedEOT, daysBetween } from '../../lib/delayCalculations';
 import {
   approvedOf, openOf, readSourceVersions, syncEvmPlannedApproval,
   fileEvmPlannedFromBaseline,
@@ -264,34 +264,25 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
    */
   const recomputeIndirectEv = useCallback(() => {
     if (!bacSplit.available) return;
-    const today = new Date().toISOString().slice(0, 10);
     let next = store;
     for (const p of store.periods) {
       if (p.status === 'approved' || p.frozen) continue;
 
-      /* TIME IS EARNED AS IT PASSES — never measured at a future date.
-         A future period measured at its own end used to clamp to 100%,
-         swallow the entire remaining curve and leave every later month
-         at zero. Now:
-           - a period that has not started earns 0 (basis 0 — it fills
-             in on a later recompute when its month actually arrives);
-           - the CURRENT period is measured at TODAY, not at its end;
-           - a past period is still measured at its own end. */
-      if (p.start > today) {
-        next = applyIndirectEv(next, p.id, 0, bacSplit.indirectBac);
-        continue;
-      }
-      const asOf = p.end > today ? today : p.end;
-
+      /* OWNER'S RULE: indirectEv = indirectBac \u00d7 \u0646\u0633\u0628\u0629 \u0627\u0644\u0634\u0647\u0631 \u0627\u0644\u0646\u0641\u0633\u0647.
+         The month's own share = the period's days \u00f7 the effective approved
+         duration at that period's end. Every period is independent \u2014 past,
+         current and future alike each carry their slice, so no month is
+         ever zero and no month swallows another's curve. */
       const eff = effectiveScheduleDuration(
         project.id,
         project.commencementDate || '',
         Number(project.plannedDurationDays) || 0,
-        asOf,
+        p.end,
       );
-      const pct = timePlannedPercent(
-        project.commencementDate || '', eff, asOf,
-      );
+      const days = daysBetween(p.start, p.end) + 1; // inclusive
+      const pct = eff.blocked || eff.effectiveDurationDays <= 0 || !p.start
+        ? null
+        : Math.min(1, days / eff.effectiveDurationDays);
       next = applyIndirectEv(next, p.id, pct, bacSplit.indirectBac);
     }
     if (next !== store) persist(next);
