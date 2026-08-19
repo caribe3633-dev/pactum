@@ -322,6 +322,8 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     // New baseline -> extend the calendar and redistribute FUTURE PV only.
     const grown = generateFuturePeriods(project, res.store).store;
     persist(redistributePv(project, grown));
+    // BRIDGE: a rebaseline is an approval act — file the source version too.
+    syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
     setRb({ reason: '', cause: 'approved-eot', daysAdded: '', valueAdded: '' });
     setRbOpen(false);
   };
@@ -385,6 +387,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     const next = { ...store, settings: { ...store.settings, activeBaselineId: id } };
     // Switching recalculates FUTURE forecasts only; frozen history is inert.
     persist(redistributePv(project, next));
+    // BRIDGE: activating an EVM baseline files an approved EVM Planned
+    // source version so the Baseline system reads this act immediately.
+    syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
   };
 
   // ── Report context: exactly what the screen shows ──
@@ -702,13 +707,19 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             const inFlight = newerInFlight
               ? ` · ${isRtl ? `V${oV} ${oSt === 'submitted' ? 'مُقدَّمة' : 'مسودة'}` : `V${oV} ${oSt === 'submitted' ? 'submitted' : 'draft'}`}`
               : '';
+            const activeBL = (store.baselines ?? []).find(b => b.id === store.settings.activeBaselineId);
+            const blV = activeBL ? String(activeBL.name ?? '').replace(/[^0-9]/g, '') || '' : '';
+            const blPart = activeBL
+              ? `${isRtl ? 'أساس' : 'BL'} ${blV ? `V${blV}` : ''} ${isRtl ? 'نشط' : 'active'} · `
+              : '';
             if (evmSrc.approved) {
               return (
                 <span className="badge badge-ok" title={isRtl
-                  ? 'نسخة القيمة المكتسبة المخططة المعتمدة — اللي بتقراها خطوط الأساس'
-                  : 'the approved EVM Planned source version the Baseline reads'}>
+                  ? 'أساس الـ EVM النشط + نسخة القيمة المكتسبة المخططة المعتمدة اللي بتقراها خطوط الأساس'
+                  : 'active EVM baseline + the approved EVM Planned source version the Baseline reads'}>
                   {period?.label}
                   {' · '}
+                  {blPart}
                   {isRtl ? `EV Planned V${aV} معتمدة ✓` : `EV Planned V${aV} approved ✓`}
                   {inFlight}
                 </span>

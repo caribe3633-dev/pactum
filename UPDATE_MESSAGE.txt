@@ -1,1 +1,1 @@
-EV tab: single merged status badge (Feb 2024 - EV Planned V1 approved + V3 in flight) instead of two separate badges
+Bridge fix: activating or rebaselining an EVM baseline now files an approved EVM Planned source version automatically; badge shows both numbers (BL V3 active + EV Planned V1 approved)
