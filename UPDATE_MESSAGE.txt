@@ -1,0 +1,1 @@
+Baseline page: lower family section removed (selector, update banner, family detail) — page is now sources + Package + read-only register
