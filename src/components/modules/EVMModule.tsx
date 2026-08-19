@@ -10,7 +10,7 @@ import ReportButton from '../reporting/ReportButton';
 // SPRINT 3 · R6 — one source for approved EOT.
 import { computeApprovedEOT } from '../../lib/delayCalculations';
 import {
-  approvedOf, readSourceVersions, syncEvmPlannedApproval,
+  approvedOf, openOf, readSourceVersions, syncEvmPlannedApproval,
 } from '../../lib/sourceVersions';
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -164,10 +164,13 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
 
   /* Approved EVM Planned source version — shown beside the period badge so
      "approved" is visible where the user looks, whichever track it came from. */
-  const evmSrcApproved = useMemo(
-    () => approvedOf(readSourceVersions(project.id), 'evm-planned'),
-    [project.id, store],
-  );
+  const evmSrc = useMemo(() => {
+    const sv = readSourceVersions(project.id);
+    return {
+      approved: approvedOf(sv, 'evm-planned'),
+      open: openOf(sv, 'evm-planned'),
+    };
+  }, [project.id, store]);
   const [tab, setTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
   const [rbOpen, setRbOpen] = useState(false);
@@ -688,18 +691,38 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <span className={cn('badge', period?.status === 'approved' ? 'badge-ok' : 'badge-gold')}>
-            {period?.label}
-            {' · '}
-            {isRtl ? STATUS_META[period?.status ?? 'draft'].ar : STATUS_META[period?.status ?? 'draft'].en}
-          </span>
-          {evmSrcApproved && (
-            <span className="badge badge-ok" title={isRtl
-              ? 'نسخة القيمة المكتسبة المخططة المعتمدة — اللي بتقراها خطوط الأساس'
-              : 'the approved EVM Planned source version the Baseline reads'}>
-              {isRtl ? `EV Planned V${evmSrcApproved.version} معتمدة ✓` : `EV Planned V${evmSrcApproved.version} approved ✓`}
-            </span>
-          )}
+          {(() => {
+            /* ONE badge, the whole truth: the reporting period, the approved
+               EVM Planned version the Baseline reads, and — when a newer
+               version is in flight — its state, so nothing looks stuck. */
+            const aV = evmSrc.approved?.version;
+            const oV = evmSrc.open?.version;
+            const oSt = evmSrc.open?.status;
+            const newerInFlight = oV !== undefined && (aV === undefined || oV > aV);
+            const inFlight = newerInFlight
+              ? ` · ${isRtl ? `V${oV} ${oSt === 'submitted' ? 'مُقدَّمة' : 'مسودة'}` : `V${oV} ${oSt === 'submitted' ? 'submitted' : 'draft'}`}`
+              : '';
+            if (evmSrc.approved) {
+              return (
+                <span className="badge badge-ok" title={isRtl
+                  ? 'نسخة القيمة المكتسبة المخططة المعتمدة — اللي بتقراها خطوط الأساس'
+                  : 'the approved EVM Planned source version the Baseline reads'}>
+                  {period?.label}
+                  {' · '}
+                  {isRtl ? `EV Planned V${aV} معتمدة ✓` : `EV Planned V${aV} approved ✓`}
+                  {inFlight}
+                </span>
+              );
+            }
+            return (
+              <span className={cn('badge', period?.status === 'approved' ? 'badge-ok' : 'badge-gold')}>
+                {period?.label}
+                {' · '}
+                {isRtl ? STATUS_META[period?.status ?? 'draft'].ar : STATUS_META[period?.status ?? 'draft'].en}
+                {evmSrc.open && ` · EV Planned ${isRtl ? `V${oV} ${oSt === 'submitted' ? 'مُقدَّمة' : 'مسودة'}` : `V${oV} ${oSt === 'submitted' ? 'submitted' : 'draft'}`}`}
+              </span>
+            );
+          })()}
           {isAdmin && (
             <button onClick={() => setShowSettings(v => !v)} className="btn btn-secondary btn-sm">
               <Settings2 className="w-3 h-3" />

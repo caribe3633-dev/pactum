@@ -1,1 +1,1 @@
-EVM approval bridge: approving a period now files an approved EVM Planned version automatically (cards + lag move at once); the EV badge shows EV Planned Vx approved next to the period status; Baseline cards show how many versions are approved
+EV tab: single merged status badge (Feb 2024 - EV Planned V1 approved + V3 in flight) instead of two separate badges
