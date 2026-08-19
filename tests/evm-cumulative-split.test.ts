@@ -80,3 +80,59 @@ describe('EVM cumulative split — regression tests (v3)', () => {
     expect(s.periods[1].ev).toBe(88);     // 50+30+8
   });
 });
+
+describe('applyIndirectEv — v3 fix: per-month increments, no double counting', () => {
+  const PID2 = 'cum-indirect-1';
+  const P2: ProjectLike = {
+    id: PID2, contractValue: 1_000_000, progress: 30,
+    commencementDate: '2026-01-01', plannedDurationDays: 365,
+    contractualCompletion: '2026-12-31',
+  };
+
+  function per(n: number): EvmPeriod {
+    return {
+      id: `q${n}`, seq: n, start: `2026-${String(n).padStart(2, '0')}-01`,
+      end: `2026-${String(n).padStart(2, '0')}-28`, label: `M${n} 2026`,
+      pv: 0, ev: 0, ac: 0, pvSource: 'manual', evSource: 'auto', acSource: 'auto',
+      status: 'draft',
+    } as EvmPeriod;
+  }
+
+  it('6️⃣ القيم المخزنة زيادات شهرية — مجموعها = المنحنى التراكمي بالظبط', async () => {
+    const { applyIndirectEv } = await import('@/lib/evm');
+    const BAC_IND = 400_000;
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2), per(3)] };
+    // نسب تراكمية زي ما timePlannedPercent بيرجعها: 10% ثم 25% ثم 40%
+    st = applyIndirectEv(st, 'q1', 0.10, BAC_IND);
+    st = applyIndirectEv(st, 'q2', 0.25, BAC_IND);
+    st = applyIndirectEv(st, 'q3', 0.40, BAC_IND);
+    expect(st.periods[0].indirectEv).toBe(40_000);       // 10% × 400K
+    expect(st.periods[1].indirectEv).toBeCloseTo(60_000, 6);
+    expect(st.periods[2].indirectEv).toBeCloseTo(60_000, 6);
+    // المجموع التراكمي = 40% × 400K = 160K (مش 40+100+160=300K زي الغلطة القديمة)
+    const total = st.periods.reduce((a: number, p: any) => a + (p.indirectEv ?? 0), 0);
+    expect(total).toBeCloseTo(160_000, 6);
+  });
+
+  it('7️⃣ EOT بيمدد المدة → الفرق السالب بيتقص بصفر (مفيش استرجاع شهور فاتت)', async () => {
+    const { applyIndirectEv } = await import('@/lib/evm');
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2)] };
+    st = applyIndirectEv(st, 'q1', 0.30, 400_000);
+    st = applyIndirectEv(st, 'q2', 0.20, 400_000); // النسبة التراكمية نزلت بعد التمديد
+    expect(st.periods[0].indirectEv).toBe(120_000);
+    expect(st.periods[1].indirectEv).toBe(0); // max(0, 20% − 30%) = 0
+  });
+
+  it('8️⃣ الإجمالي التراكمي للفترة من مجموع الزيادات (اتساق كامل مع deriveClassTotals)', async () => {
+    const { applyIndirectEv, readEvm, writeEvm } = await import('@/lib/evm');
+    localStorage.clear();
+    localStorage.setItem('pactum-projects', JSON.stringify([P2]));
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2)] };
+    st = applyIndirectEv(st, 'q1', 0.10, 400_000);
+    st = applyIndirectEv(st, 'q2', 0.30, 400_000);
+    writeEvm(PID2, st);
+    const s = readEvm(PID2);
+    expect(s.periods[0].ev).toBe(40_000);
+    expect(s.periods[1].ev).toBe(120_000); // 40K + 80K = 30% × 400K ✓
+  });
+});

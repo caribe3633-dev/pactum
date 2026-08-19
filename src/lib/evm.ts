@@ -1571,13 +1571,21 @@ export function hasSplit(p: EvmPeriod | null | undefined): boolean {
 /**
  * STEP 12 rule 5 — INDIRECT EV IS TIME-BASED, NEVER TYPED.
  *
- *   indirectEv = timePlannedPercent × indirectBac
+ *   indirectEvBasis = timePlannedPercent (CUMULATIVE elapsed fraction at
+ *                     the period's own end — kept as the audit basis)
+ *   indirectEv      = (basis − previous period's basis) × indirectBac
  *
- * `pct` must come from the effective APPROVED schedule (commencement +
- * approved duration + effective approved EOT). A null pct means the
- * basis is unknowable — an approved EOT with no effective date (Q2=C) —
- * and the period is left UNTOUCHED rather than given a fabricated value.
+ * v3 FIX: `pct` is CUMULATIVE by construction (elapsed ÷ duration), but the
+ * stored component must be THAT PERIOD'S OWN value — the increment between
+ * two consecutive bases — because `deriveClassTotals` builds the parent
+ * cumulative EV by SUMMING components across periods. Storing the raw
+ * cumulative figure here double-counted it once per period. The delta is
+ * clamped at zero: an EOT that stretches the duration never "un-earns" a
+ * past month.
  *
+ * `pct` must come from the effective APPROVED schedule. A null pct means
+ * the basis is unknowable — an approved EOT with no effective date — and
+ * the period is left UNTOUCHED rather than given a fabricated value.
  * Approved and frozen periods are never rewritten: history stands.
  */
 export function applyIndirectEv(
@@ -1595,7 +1603,15 @@ export function applyIndirectEv(
     return { ...store, periods };
   }
 
-  const value = Math.max(0, Math.min(1, pct)) * num(indirectBac);
+  // The PREVIOUS cumulative basis (0 before the first period). Summing the
+  // per-period deltas reproduces the cumulative curve exactly.
+  let prevBasis = 0;
+  for (let k = i - 1; k >= 0; k--) {
+    const b = store.periods[k].indirectEvBasis;
+    if (typeof b === 'number' && Number.isFinite(b)) { prevBasis = b; break; }
+  }
+  const cumulative = Math.max(0, Math.min(1, pct));
+  const value = Math.max(0, cumulative - prevBasis) * num(indirectBac);
   if (p.indirectEv === value && p.indirectEvBasis === pct) return store;
 
   const next: EvmPeriod = { ...p, indirectEv: value, indirectEvBasis: pct };

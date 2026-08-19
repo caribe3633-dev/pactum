@@ -1,1 +1,1 @@
-Cert-to-cash link: paid certificates only, anchored exclusively on the payment date; a paid cert without a payment date is not syncable; cash flow table shows month + year only
+Indirect EV fix: the stored value is now the month own increment between consecutive cumulative time bases — no more double counting in the cumulative EV; negative deltas (EOT stretching) clamp at zero
