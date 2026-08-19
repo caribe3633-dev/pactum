@@ -545,6 +545,42 @@ function readContractLive(projectId: string): unknown {
   }
 }
 
+/**
+ * BRIDGE — EVM period sign-off files an approved EVM Planned version.
+ *
+ * Approving a period in the EVM screen is an approval ACT; this files it
+ * as the source version the Baseline system reads, so cards, package lag
+ * and gates move the moment a period is signed. If an open draft/submitted
+ * version exists it is carried through; otherwise a fresh version is
+ * captured from the live EVM store first. Returns false silently when the
+ * live store is empty (nothing to version).
+ */
+export function syncEvmPlannedApproval(projectId: string, actor: Actor): boolean {
+  if (!projectId) return false;
+  const store = readSourceVersions(projectId);
+  const open = openOf(store, 'evm-planned');
+  let versionId: string | null;
+
+  if (open) {
+    versionId = open.id;
+    if (open.status === 'draft') {
+      const sub = submitVersion({ projectId, versionId, actor });
+      if (!sub.ok) return false;
+    }
+  } else {
+    const created = createVersion({ projectId, kind: 'evm-planned', actor });
+    if (!created.ok) return false;
+    const drafts = created.store.versions.filter(v => v.kind === 'evm-planned' && v.status === 'draft');
+    versionId = drafts.length ? drafts[drafts.length - 1].id : null;
+    if (!versionId) return false;
+    const sub = submitVersion({ projectId, versionId, actor });
+    if (!sub.ok) return false;
+  }
+
+  const app = approveVersion({ projectId, versionId, actor });
+  return app.ok;
+}
+
 export function readLiveSource(projectId: string, kind: SourceKind): unknown {
   // The contract lives in the shared projects store, not a per-project key.
   if (kind === 'contract') return readContractLive(projectId);

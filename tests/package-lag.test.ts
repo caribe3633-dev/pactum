@@ -88,3 +88,26 @@ describe('packageLag — regression tests', () => {
     expect(r.behind).toHaveLength(0);
   });
 });
+
+describe('syncEvmPlannedApproval — the bridge', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('5️⃣ المزامنة تسجل نسخة معتمدة من المخزن الحي وتعيد true', async () => {
+    const { syncEvmPlannedApproval, approvedOf, readSourceVersions, SRCVER_KEY } = await import('@/lib/sourceVersions');
+    // مخزن EVM حي (غير فاضي) عشان اللقطة تتبني
+    localStorage.setItem('pactum-evm-lag-1', JSON.stringify({ settings: {}, periods: [{ id: 'x' }] }));
+    const ok = syncEvmPlannedApproval('lag-1', { userId: 'tester' });
+    expect(ok).toBe(true);
+    const approved = approvedOf(readSourceVersions('lag-1'), 'evm-planned');
+    expect(approved?.version).toBe(1);
+    expect(approved?.status).toBe('approved');
+    expect(localStorage.getItem(SRCVER_KEY('lag-1'))).toBeTruthy();
+  });
+
+  it('6️⃣ مخزن فاضي → مفيش نسخة ومفيش ضجيج', async () => {
+    const { syncEvmPlannedApproval, readSourceVersions } = await import('@/lib/sourceVersions');
+    const ok = syncEvmPlannedApproval('lag-empty', { userId: 'tester' });
+    expect(ok).toBe(false);
+    expect(readSourceVersions('lag-empty').versions).toHaveLength(0);
+  });
+});

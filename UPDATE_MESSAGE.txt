@@ -1,1 +1,1 @@
-Package Lag alerts: amber source card + Baseline tab mark when a newer source version is approved after the package (V1 to V2), and when all sources are approved but no package exists; clears itself once the new package is approved
+EVM approval bridge: approving a period now files an approved EVM Planned version automatically (cards + lag move at once); the EV badge shows EV Planned Vx approved next to the period status; Baseline cards show how many versions are approved

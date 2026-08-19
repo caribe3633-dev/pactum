@@ -31,7 +31,7 @@ import { readSyncedEvm, snapshot as evmSnapshot, EAC_META, type EvmStore } from 
  * baselines — the user should not have to visit five modules to find out
  * why an approval is blocked.
  */
-import { refsReadiness, describeRefs, SOURCE_LABELS, SOURCE_KINDS, approvedOf, openOf, readSourceVersions } from '../../lib/sourceVersions';
+import { refsReadiness, describeRefs, SOURCE_LABELS, SOURCE_KINDS, approvedOf, openOf, versionsOf, readSourceVersions } from '../../lib/sourceVersions';
 
 import {
   readBaselines, createBaseline, activateBaseline, supersedeBaseline, rejectDraft,
@@ -258,6 +258,7 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
       const approved = approvedOf(sv, kind);
       const open = openOf(sv, kind);
       const lb = lag.behind.find(b => b.kind === kind);
+      const approvedCount = versionsOf(sv, kind).filter(v => v.status === 'approved').length;
       return {
         kind,
         approvedVersion: approved ? approved.version : null,
@@ -265,6 +266,7 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
         openStatus: open ? open.status : null,
         pkgVersion: lb ? lb.pkgVersion : null,
         behind: !!lb,
+        approvedCount,
       };
     });
   }, [project.id, pkgTick, store, lag]);
@@ -516,7 +518,9 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                   : s.openStatus === 'draft'
                   ? (isRtl ? `مسودة V${s.openVersion} — تحتاج مراجعة وإرسالًا` : `Draft V${s.openVersion} — needs review`)
                   : ok
-                  ? (isRtl ? 'معتمدة وتقرأ تلقائيًا في الحزمة' : 'approved — auto-read by the package')
+                  ? (isRtl
+                      ? `معتمدة وتقرأ تلقائيًا في الحزمة${s.approvedCount > 1 ? ` · ${s.approvedCount} نسخ معتمدة` : ''}`
+                      : `approved — auto-read by the package${s.approvedCount > 1 ? ` · ${s.approvedCount} approved versions` : ''}`)
                   : (isRtl ? 'لا توجد نسخة بعد' : 'No version yet');
                 return (
                   <div

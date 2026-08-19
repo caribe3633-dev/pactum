@@ -10,6 +10,9 @@ import ReportButton from '../reporting/ReportButton';
 // SPRINT 3 · R6 — one source for approved EOT.
 import { computeApprovedEOT } from '../../lib/delayCalculations';
 import {
+  approvedOf, readSourceVersions, syncEvmPlannedApproval,
+} from '../../lib/sourceVersions';
+import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ScatterChart, Scatter, ReferenceLine, ZAxis, Cell,
   LineChart, Brush,
@@ -158,6 +161,13 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   const isAdmin = user?.role === 'admin';
 
   const [store, setStore] = useState<EvmStore>(() => readSyncedEvm(project));
+
+  /* Approved EVM Planned source version — shown beside the period badge so
+     "approved" is visible where the user looks, whichever track it came from. */
+  const evmSrcApproved = useMemo(
+    () => approvedOf(readSourceVersions(project.id), 'evm-planned'),
+    [project.id, store],
+  );
   const [tab, setTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
   const [rbOpen, setRbOpen] = useState(false);
@@ -287,7 +297,14 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
        still accepts one, and preserves any comment already stored on the
        period, so passing undefined changes nothing that was recorded. */
     const res = transition(store, p.id, to, user?.username ?? 'unknown', undefined, bac);
-    if (res.ok) persist(res.store);
+    if (res.ok) {
+      persist(res.store);
+      // BRIDGE: signing off a period also files an approved EVM Planned
+      // source version, so the Baseline cards and lag alerts move at once.
+      if (to === 'approved') {
+        syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
+      }
+    }
   };
 
   const doRebaseline = () => {
@@ -676,6 +693,13 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             {' · '}
             {isRtl ? STATUS_META[period?.status ?? 'draft'].ar : STATUS_META[period?.status ?? 'draft'].en}
           </span>
+          {evmSrcApproved && (
+            <span className="badge badge-ok" title={isRtl
+              ? 'نسخة القيمة المكتسبة المخططة المعتمدة — اللي بتقراها خطوط الأساس'
+              : 'the approved EVM Planned source version the Baseline reads'}>
+              {isRtl ? `EV Planned V${evmSrcApproved.version} معتمدة ✓` : `EV Planned V${evmSrcApproved.version} approved ✓`}
+            </span>
+          )}
           {isAdmin && (
             <button onClick={() => setShowSettings(v => !v)} className="btn btn-secondary btn-sm">
               <Settings2 className="w-3 h-3" />
