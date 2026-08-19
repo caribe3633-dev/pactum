@@ -16,7 +16,7 @@ import ReportButton from '../reporting/ReportButton';
 // Phase 3.4 — real dates alongside the month label. The label remains the
 // join key that CertsModule and both sync functions match on; dates are
 // additive, so a row without them behaves exactly as it did before.
-import { windowOf,
+import { monthLabel, windowOf,
   CashFlowDates, datesFrom, planMigration, applyMigration,
   parseMonthLabel, fxDateOf, hasDates, groupByWindow,
   normaliseIso, lastDayOfMonth,
@@ -426,7 +426,11 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
        * cash flow can carry.
        * ════════════════════════════════════════════════════════════════
        */
-      const eligible  = certs.filter(c => c.status === 'paid');
+      /* PAID ONLY, and the link month is the PAYMENT DATE — exclusively.
+         A paid certificate without a payment date cannot be placed in a
+         month and is skipped rather than guessed into the wrong one. */
+      const eligible  = certs.filter(c =>
+        c.status === 'paid' && !!normaliseIso((c as any).paymentDate));
       const newEntries: SyncEntry[] = [];
 
       const currentRows = [...data];
@@ -440,9 +444,7 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
           const d = normaliseIso(m);
           return d ? windowOf(d) : '';
         };
-        const certIsoW = normaliseIso((cert as any).period)
-          || normaliseIso((cert as any).paymentDate)
-          || normaliseIso((cert as any).approvalDate);
+        const certIsoW = normaliseIso((cert as any).paymentDate);
         const win = certIsoW ? windowOf(certIsoW) : '';
         const idx = currentRows.findIndex(r => {
           if (win) {
@@ -461,10 +463,7 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
           // A certificate knows its own dates. Taking them is derivation,
           // not inference: the date comes from the source document rather
           // than from reading a label.
-          const submitted = normaliseIso((cert as any).period);
-          const certDate = submitted
-            || normaliseIso((cert as any).paymentDate)
-            || normaliseIso((cert as any).approvalDate);
+          const certDate = normaliseIso((cert as any).paymentDate);
           const parsed = certDate ? '' : parseMonthLabel(label, new Date().getFullYear()).date;
           const iso = certDate || parsed;
           currentRows.push({
@@ -1081,7 +1080,15 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
                 <tr key={i}>
                   <td className="col-pin text-white">
                     <span className="inline-flex items-center gap-1.5">
-                      <EditableText value={row.month} onSave={v => updateField(i, 'month', v)} canEdit={canEdit} />
+                      {/* DISPLAY: month + year only (from the calendar);
+                          the raw stored value rides along in the tooltip. */}
+                      <span title={row.month} className="font-mono">
+                        {(() => {
+                          const d = normaliseIso(row.month);
+                          const w = d ? windowOf(d) : (/^\d{4}-\d{2}/.test(row.month) ? row.month.slice(0, 7) : '');
+                          return w ? monthLabel(w) : row.month;
+                        })()}
+                      </span>
                       <CurrencyBadge code={row.currency ?? ''} base={money.base} />
                       {!row.transactionDate && (
                         <span className="badge badge-warn"

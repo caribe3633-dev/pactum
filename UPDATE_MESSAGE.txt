@@ -1,1 +1,1 @@
-Certificates: Period is now Submission Date (calendar picker in the form and the table); the cert-to-cash-flow link now derives the month from the real submission/payment date in both sync paths — no more dropped certificates from free-text dates
+Cert-to-cash link: paid certificates only, anchored exclusively on the payment date; a paid cert without a payment date is not syncable; cash flow table shows month + year only

@@ -137,9 +137,11 @@ function pushCertToCashFlow(
     const d = normaliseIso(m);
     return d ? windowOf(d) : '';
   };
-  const certIso = normaliseIso((cert as any).period)
-    || normaliseIso((cert as any).paymentDate)
-    || normaliseIso((cert as any).approvalDate);
+  /* OWNER'S RULE: the link is on the PAYMENT DATE, exclusively. Not the
+     submission date, not the approval date — money lands in the ledger the
+     month it was actually paid. A paid certificate with no payment date
+     cannot be placed and is refused at the eligibility check instead. */
+  const certIso = normaliseIso((cert as any).paymentDate);
   const win = certIso ? windowOf(certIso) : '';
   const idx = rows.findIndex(r => {
     if (win) {
@@ -161,14 +163,10 @@ function pushCertToCashFlow(
   } else {
     // A certificate carries its own dates. Payment date first — that is
     // when the money moved; approval date is when it was authorised.
-    const submitted = normaliseIso((cert as any).period);
     const paid = normaliseIso((cert as any).paymentDate);
-    const approved = normaliseIso((cert as any).approvalDate);
-    const fromLabel = paid || approved || submitted
-      ? ''
-      : parseMonthLabel(label, new Date().getFullYear()).date;
-    const iso = submitted || paid || approved || fromLabel;
-    // The ledger entry is anchored on the REAL date — not the label.
+    // Payment date only — the caller guarantees it exists (eligibility),
+    // the label is a defensive last resort that should never fire.
+    const iso = paid || parseMonthLabel(label, new Date().getFullYear()).date;
     const monthKeyForLedger = iso || label;
 
     // Currency provenance. `cert.net` is already in the reporting currency;
@@ -194,9 +192,8 @@ function pushCertToCashFlow(
       month: monthKeyForLedger, in: cert.net, out: 0, net: cert.net, cumNet: 0,
       ...(iso
         ? datesFrom(iso, {
-            // Effective on payment; approval is the fallback when unpaid.
-            effectiveDate: paid || approved || undefined,
-            source: (paid || approved) ? 'derived' : 'inferred',
+            effectiveDate: paid || undefined,
+            source: paid ? 'derived' : 'inferred',
           })
         : {}),
       ...ccyFields,
@@ -460,7 +457,9 @@ export default function CertsModule({ project, canEdit = true }: { project: Proj
    * ══════════════════════════════════════════════════════════════════
    */
   const isSyncableCert = (d: CertRow) =>
-    d.status === 'paid' && storedUnitOf(d, money.base) === money.base;
+    d.status === 'paid'
+    && !!normaliseIso((d as any).paymentDate)
+    && storedUnitOf(d, money.base) === money.base;
 
   // ── Push received (paid) certs to Cash Flow ───────────────────────────
   const handleSyncAll = () => {
