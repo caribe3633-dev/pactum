@@ -33,6 +33,8 @@ import LoadSampleData from '../components/LoadSampleData';
 // Baseline tab alert — approved sources newer than the package in force.
 import { packageLag } from '../lib/baselines';
 import { timelineNeedsAttention } from '../lib/timeline';
+import { contractPhaseOption, isContractPhaseException } from '../lib/contractPhases';
+import { snapshot as evmSnapshot, readSyncedEvm } from '../lib/evm';
 
 const TABS = [
   { id: 'overview',  icon: ClipboardList, en: 'Overview',           ar: 'نظرة عامة' },
@@ -76,6 +78,18 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
     () => (project ? timelineNeedsAttention(project.id) : false),
     [project, activeTab],
   );
+
+  /* Header cards — the contract phase the user selects in the Contract tab,
+     and the EVM health verdict from the same engine the EVM tab runs. */
+  const contractPhase = project ? contractPhaseOption(project.contractPhase) : null;
+  const evmHealth = useMemo(() => {
+    if (!project) return null;
+    try {
+      return evmSnapshot(project as any, readSyncedEvm(project as any)).health ?? null;
+    } catch {
+      return null;
+    }
+  }, [project, activeTab]);
 
   const sectors = useSectors();
   const sector = useMemo(
@@ -206,7 +220,7 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
             </h1>
           </div>
           {/* 2 · EXECUTIVE SUMMARY — the three figures a director checks first */}
-          <div className="kpi-strip sm:!grid-cols-3 shrink-0 w-full sm:w-auto sm:min-w-[26rem]">
+          <div className="kpi-strip sm:!grid-cols-2 lg:!grid-cols-4 shrink-0 w-full sm:w-auto">
             <div className="kpi">
               <div className="kpi-k">{t.contractValue}</div>
               <div className="kpi-v">{formatCompactNumber(project.contractValue)}</div>
@@ -219,14 +233,49 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
             </div>
             <div className="kpi">
               <div className="kpi-k">{t.status}</div>
+              {contractPhase ? (
+                <>
+                  <div className="mt-0.5">
+                    <span className={cn('badge',
+                      isContractPhaseException(project.contractPhase ?? '') || project.contractPhase === 'SUSPENDED'
+                        ? 'badge-warn'
+                        : 'badge-ok')}>
+                      {lang === 'ar' ? contractPhase.ar : contractPhase.en}
+                    </span>
+                  </div>
+                  <div className="kpi-sub font-mono">{contractPhase.value}</div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-0.5">
+                    <span className={cn('badge', project.delayDays > 0 ? 'badge-warn' : 'badge-ok')}>
+                      {project.delayDays > 0 ? t.delayed : t.onTrack}
+                    </span>
+                  </div>
+                  {project.delayDays > 0 && (
+                    <div className="kpi-sub">
+                      {project.delayDays} {lang === 'ar' ? 'يوم تأخير' : 'days delay'}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            {/* EVM HEALTH — the verdict of the same engine the EVM tab runs. */}
+            <div className="kpi">
+              <div className="kpi-k">{lang === 'ar' ? 'صحة القيمة المكتسبة' : 'EVM Health'}</div>
               <div className="mt-0.5">
-                <span className={cn('badge', project.delayDays > 0 ? 'badge-warn' : 'badge-ok')}>
-                  {project.delayDays > 0 ? t.delayed : t.onTrack}
+                <span className={cn('badge',
+                  !evmHealth ? 'badge-neutral'
+                  : evmHealth.tone === 'ok' ? 'badge-ok'
+                  : evmHealth.tone === 'gold' ? 'badge-gold'
+                  : evmHealth.tone === 'warn' ? 'badge-warn'
+                  : evmHealth.tone === 'risk' ? 'badge-risk' : 'badge-neutral')}>
+                  {evmHealth ? (lang === 'ar' ? evmHealth.ar : evmHealth.en) : (lang === 'ar' ? 'لا توجد بيانات' : 'No data')}
                 </span>
               </div>
-              {project.delayDays > 0 && (
+              {evmHealth && (evmHealth.tone !== 'ok' && evmHealth.tone !== 'muted') && (
                 <div className="kpi-sub">
-                  {project.delayDays} {lang === 'ar' ? 'يوم تأخير' : 'days delay'}
+                  {lang === 'ar' ? (evmHealth.reasonsAr[0] ?? '') : (evmHealth.reasons[0] ?? '')}
                 </div>
               )}
             </div>

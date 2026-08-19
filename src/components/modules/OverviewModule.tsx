@@ -6,7 +6,7 @@ import { formatMoney, formatPercent, cn } from '../../lib/utils';
 import { formatDate, toInputDate } from '../../lib/dateFormat';
 import { Activity, Clock, FileWarning, Wallet, Landmark, RefreshCw } from 'lucide-react';
 import { EditableNumber, EditableDate } from '../EditableCell';
-import { computeApprovedEOT, syncDelayRegister } from '../../lib/delayCalculations';
+import { computeApprovedEOT, syncDelayRegister, computeLd, computeProgramme } from '../../lib/delayCalculations';
 import ReportButton from '../reporting/ReportButton';
 // SPRINT 1 · TASK 1 — commercial totals must never add two currencies.
 // The rows were already converted at save time; the contract base was not.
@@ -160,6 +160,19 @@ export default function OverviewModule({
   canEdit?: boolean;
 }) {
   const { t, lang }        = useTranslation();
+
+  /* ESTIMATED FINISH — linked to Delay Analysis. Same engine, same inputs,
+     same numbers as the Delay tab's tile: Approved Finish + Total Delay. */
+  const estimatedFinish = (() => {
+    try {
+      const eot = computeApprovedEOT(project.id);
+      const ld = computeLd(project, eot);
+      const programme = computeProgramme(project, ld.totalApprovedEOT, ld.totalDelay);
+      return programme.estimatedFinish || '';
+    } catch {
+      return '';
+    }
+  })();
   const { updateProject }  = useProjects();
 
   const [computed, setComputed] = useState<Computed>(() => computeFromStorage(project));
@@ -269,16 +282,17 @@ export default function OverviewModule({
       label: t.originalContractValue,
       icon: Landmark,
       color: 'text-primary',
-      editable: true,
+      // AUTO & LINKED: manual entry lives in the Contract tab only (its
+      // "Contract Value (manual)" card writes this same field). Overview
+      // reads it live — no second place to type the same number.
+      editable: false,
       node: (
         <>
-          <EditableNumber
-            value={project.contractValue}
-            onSave={(v) => patch('contractValue', v)}
-            canEdit={canEdit}
-            display={formatMoney(project.contractValue, { currency: contractCcy })}
-            className="font-mono text-lg text-primary number-ltr"
-          />
+          <span className="font-mono text-lg text-primary number-ltr" title={lang === 'ar' ? 'يُدخل يدويًا من تاب العقد — وبيتحدث هنا تلقائيًا' : 'entered manually in the Contract tab — updates here automatically'}>
+            {project.contractValue !== undefined && project.contractValue !== null
+              ? formatMoney(project.contractValue, { currency: contractCcy })
+              : '—'}
+          </span>
           {/*
             THE CONVERTED EQUIVALENT, STATED.
 
@@ -392,6 +406,22 @@ export default function OverviewModule({
       node: (
         <span className="font-mono text-lg text-primary number-ltr">
           {computed.approvedCompletion ? formatDate(computed.approvedCompletion) : '—'}
+        </span>
+      ),
+    },
+    {
+      label: lang === 'ar' ? 'الانتهاء المتوقع' : 'Estimated Finish',
+      icon: Clock,
+      color: 'text-chart-5',
+      editable: false,
+      node: (
+        <span
+          className="font-mono text-lg text-chart-5 number-ltr"
+          title={lang === 'ar'
+            ? 'مرتبط بتحليل التأخير — نفس معادلة تاب التأخيرات حرفيًا'
+            : 'linked to Delay Analysis — the exact same formula as the Delay tab'}
+        >
+          {estimatedFinish ? formatDate(estimatedFinish) : '—'}
         </span>
       ),
     },

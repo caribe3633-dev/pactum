@@ -1,1 +1,1 @@
-Timeline: Base Currency and Exchange Rate fields removed from the approval form; Timeline tab now shows an alert mark when an approved Baseline Package exists but no timeline snapshot has been approved
+Header cards: Status now shows the contract phase you pick in the Contract tab (auto, with warning tones for suspended/terminated); new EVM Health card beside it from the EVM engine verdict with its reason
