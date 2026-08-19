@@ -1,1 +1,1 @@
-Header cards: Status now shows the contract phase you pick in the Contract tab (auto, with warning tones for suspended/terminated); new EVM Health card beside it from the EVM engine verdict with its reason
+Certificates: Period is now Submission Date (calendar picker in the form and the table); the cert-to-cash-flow link now derives the month from the real submission/payment date in both sync paths — no more dropped certificates from free-text dates

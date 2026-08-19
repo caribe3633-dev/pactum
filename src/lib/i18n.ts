@@ -56,7 +56,7 @@ const T = {
     // Certs
     ipcTitle: 'Interim Payment Certificates (IPC)',
     totalCertifiedValue: 'Total Certified Value', totalRetentionHeld: 'Total Retention Held',
-    certNo: 'Cert No.', period: 'Period', grossAmount: 'Gross',
+    certNo: 'Cert No.', period: 'Period', certSubmissionDate: 'Submission Date', grossAmount: 'Gross',
     retention: 'Retention', netPayable: 'Net Payable',
     approvalDate: 'Approval Date', paymentDate: 'Payment Date', docs: 'Docs',
     // Subs
@@ -123,7 +123,7 @@ const T = {
     ipcTitle: 'مستخلصات المالك (IPC)',
     totalCertifiedValue: 'إجمالي القيمة المعتمدة',
     totalRetentionHeld: 'إجمالي الضمان المحتجز',
-    certNo: 'رقم المستخلص', period: 'الفترة', grossAmount: 'الإجمالي',
+    certNo: 'رقم المستخلص', period: 'الفترة', certSubmissionDate: 'تاريخ التقديم', grossAmount: 'الإجمالي',
     retention: 'الضمان', netPayable: 'الصافي المستحق',
     approvalDate: 'تاريخ الاعتماد', paymentDate: 'تاريخ الدفع', docs: 'المرفقات',
     trade: 'التخصص', plannedVsActual: 'المخطط مقابل الفعلي',

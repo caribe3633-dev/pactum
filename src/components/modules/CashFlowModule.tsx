@@ -16,7 +16,7 @@ import ReportButton from '../reporting/ReportButton';
 // Phase 3.4 — real dates alongside the month label. The label remains the
 // join key that CertsModule and both sync functions match on; dates are
 // additive, so a row without them behaves exactly as it did before.
-import {
+import { windowOf,
   CashFlowDates, datesFrom, planMigration, applyMigration,
   parseMonthLabel, fxDateOf, hasDates, groupByWindow,
   normaliseIso, lastDayOfMonth,
@@ -432,7 +432,25 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
       const currentRows = [...data];
       for (const cert of eligible) {
         const label = cert.period || cert.no;
-        const idx   = currentRows.findIndex(r => r.month === label);
+        /* Same date-derived join as CertsModule: the certificate's real
+           date decides the monthly window; free-text labels are the last
+           resort only. */
+        const asWindow = (m: string): string => {
+          if (/^\d{4}-\d{2}/.test(m)) return m.slice(0, 7);
+          const d = normaliseIso(m);
+          return d ? windowOf(d) : '';
+        };
+        const certIsoW = normaliseIso((cert as any).period)
+          || normaliseIso((cert as any).paymentDate)
+          || normaliseIso((cert as any).approvalDate);
+        const win = certIsoW ? windowOf(certIsoW) : '';
+        const idx = currentRows.findIndex(r => {
+          if (win) {
+            const rw = asWindow(r.month);
+            if (rw) return rw === win;
+          }
+          return r.month === label;
+        });
         if (idx >= 0) {
           currentRows[idx] = {
             ...currentRows[idx],
@@ -443,12 +461,14 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
           // A certificate knows its own dates. Taking them is derivation,
           // not inference: the date comes from the source document rather
           // than from reading a label.
-          const certDate = normaliseIso((cert as any).paymentDate)
-                        || normaliseIso((cert as any).approvalDate);
+          const submitted = normaliseIso((cert as any).period);
+          const certDate = submitted
+            || normaliseIso((cert as any).paymentDate)
+            || normaliseIso((cert as any).approvalDate);
           const parsed = certDate ? '' : parseMonthLabel(label, new Date().getFullYear()).date;
           const iso = certDate || parsed;
           currentRows.push({
-            month: label, in: cert.net, out: 0, net: cert.net, cumNet: 0,
+            month: iso || label, in: cert.net, out: 0, net: cert.net, cumNet: 0,
             ...(iso ? datesFrom(iso, { source: certDate ? 'derived' : 'inferred' }) : {}),
           });
         }

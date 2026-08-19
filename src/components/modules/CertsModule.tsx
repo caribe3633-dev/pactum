@@ -21,7 +21,7 @@ import { contractCurrencyOf } from '../../lib/projectCurrency';
 // Phase 3.4 — CertsModule is the SECOND writer to pactum-cashflow-{p}.
 // It must produce the same row shape as CashFlowModule or the two writers
 // drift and a row's dates depend on which module created it.
-import { CashFlowDates, CashFlowCurrency, datesFrom, normaliseIso, parseMonthLabel } from '../../lib/cashFlowDates';
+import { CashFlowDates, CashFlowCurrency, datesFrom, normaliseIso, parseMonthLabel, windowOf } from '../../lib/cashFlowDates';
 import { CurrencyBadge, TransactionAmountInput } from '../CurrencyAmount';
 // Task 5 — authoritative company link; the projectIds cache can be stale.
 import { companyIdOfProject } from '../../lib/projectMaster';
@@ -126,10 +126,28 @@ function pushCertToCashFlow(
   const rows = readCashFlow(projectId);
   const label = cert.period || cert.no;
 
-  // Find an existing row for this period or create a new one. The match is
-  // still on the label — changing the join key here without changing it in
-  // CashFlowModule would split one ledger into two.
-  const idx = rows.findIndex(r => r.month === label);
+  /* THE LINK IS DERIVED FROM A REAL DATE, NEVER FROM FREE TEXT.
+     A certificate's submission/payment date decides which monthly WINDOW
+     (YYYY-MM) its cash lands in; a cash row joins that window whether it
+     was created by the month picker, a full ISO date, or (legacy) a label
+     that parses. Exact-label matching survives only as the last resort —
+     that free-text join is what used to drop certificates on the floor. */
+  const asWindow = (m: string): string => {
+    if (/^\d{4}-\d{2}/.test(m)) return m.slice(0, 7);
+    const d = normaliseIso(m);
+    return d ? windowOf(d) : '';
+  };
+  const certIso = normaliseIso((cert as any).period)
+    || normaliseIso((cert as any).paymentDate)
+    || normaliseIso((cert as any).approvalDate);
+  const win = certIso ? windowOf(certIso) : '';
+  const idx = rows.findIndex(r => {
+    if (win) {
+      const rw = asWindow(r.month);
+      if (rw) return rw === win;
+    }
+    return r.month === label;
+  });
   if (idx >= 0) {
     const existing = rows[idx];
     rows[idx] = {
@@ -143,12 +161,15 @@ function pushCertToCashFlow(
   } else {
     // A certificate carries its own dates. Payment date first — that is
     // when the money moved; approval date is when it was authorised.
+    const submitted = normaliseIso((cert as any).period);
     const paid = normaliseIso((cert as any).paymentDate);
     const approved = normaliseIso((cert as any).approvalDate);
-    const fromLabel = paid || approved
+    const fromLabel = paid || approved || submitted
       ? ''
       : parseMonthLabel(label, new Date().getFullYear()).date;
-    const iso = paid || approved || fromLabel;
+    const iso = submitted || paid || approved || fromLabel;
+    // The ledger entry is anchored on the REAL date — not the label.
+    const monthKeyForLedger = iso || label;
 
     // Currency provenance. `cert.net` is already in the reporting currency;
     // the fields below record that fact and, for a foreign certificate,
@@ -170,7 +191,7 @@ function pushCertToCashFlow(
       : { currency: reportingCurrency, reportingCurrency, exchangeRate: 1 };
 
     rows.push({
-      month: label, in: cert.net, out: 0, net: cert.net, cumNet: 0,
+      month: monthKeyForLedger, in: cert.net, out: 0, net: cert.net, cumNet: 0,
       ...(iso
         ? datesFrom(iso, {
             // Effective on payment; approval is the fallback when unpaid.
@@ -707,8 +728,16 @@ export default function CertsModule({ project, canEdit = true }: { project: Proj
                 <input className="field-input font-mono" placeholder="IPC-0X" value={newRow.no} onChange={e => setNewRow({ ...newRow, no: e.target.value })} required dir="ltr" />
               </div>
               <div className="field">
-                <label className="field-label" data-required>{t.period}</label>
-                <input className="field-input" placeholder={lang === 'ar' ? 'يناير 2025' : 'Jan 2025'} value={newRow.period} onChange={e => setNewRow({ ...newRow, period: e.target.value })} required />
+                <label className="field-label" data-required>{t.certSubmissionDate}</label>
+                {/* Picked from a calendar, not typed — the ISO date stored
+                    here is what the cash-flow link derives its month from. */}
+                <input
+                  className="field-input font-mono number-ltr"
+                  type="date" dir="ltr" style={{ colorScheme: 'dark' }}
+                  value={newRow.period || ''}
+                  onChange={e => setNewRow({ ...newRow, period: e.target.value })}
+                  required
+                />
               </div>
               <TransactionAmountInput
                 label={t.grossAmount}
@@ -758,7 +787,7 @@ export default function CertsModule({ project, canEdit = true }: { project: Proj
             <thead>
               <tr>
                 <th className="col-pin">{t.certNo}</th>
-                <th>{t.period}</th>
+                <th>{t.certSubmissionDate}</th>
                 {/* The unit is READ, never typed. These three headers used
                     to carry a literal "(SAR)" from i18n, so an AED or SAR
                     project announced the wrong currency above correct
@@ -813,7 +842,7 @@ export default function CertsModule({ project, canEdit = true }: { project: Proj
                       </span>
                     </td>
                     <td className="text-white">
-                      <EditableText value={row.period} onSave={v => updateField(i, 'period', v)} canEdit={canEdit} />
+                      <EditableDate value={row.period} onSave={v => updateField(i, 'period', v)} canEdit={canEdit} className="font-mono number-ltr" />
                     </td>
                     <td className="money">
                       {/* SPRINT 3 — on a foreign row the EDITABLE value is
