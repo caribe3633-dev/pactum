@@ -235,6 +235,7 @@ export interface SourceVersionStore {
  * is not V0; it is the absence of a record, and it renders as such.
  */
 export interface SourceRefs {
+  contract: SourceRef | null;
   budget: SourceRef | null;
   cashflow: SourceRef | null;
   evmPlanned: SourceRef | null;
@@ -1118,7 +1119,7 @@ export function rejectVersion(input: {
 // ── Binding a baseline to its sources ──────────────────────────────────
 
 export const EMPTY_SOURCE_REFS: SourceRefs = {
-  budget: null, cashflow: null, evmPlanned: null, claims: null, changeOrders: null,
+  contract: null, budget: null, cashflow: null, evmPlanned: null, claims: null, changeOrders: null,
 };
 
 function refOf(v: SourceVersion | null): SourceRef | null {
@@ -1141,6 +1142,7 @@ function refOf(v: SourceVersion | null): SourceRef | null {
 export function approvedRefs(projectId: string): SourceRefs {
   const s = readSourceVersions(projectId);
   return {
+    contract: refOf(approvedOf(s, 'contract')),
     budget: refOf(approvedOf(s, 'budget')),
     cashflow: refOf(approvedOf(s, 'cashflow')),
     evmPlanned: refOf(approvedOf(s, 'evm-planned')),
@@ -1163,6 +1165,7 @@ export function cleanSourceRefs(r: any): SourceRefs | null {
     };
   };
   return {
+    contract: one(r.contract),
     budget: one(r.budget),
     cashflow: one(r.cashflow),
     evmPlanned: one(r.evmPlanned),

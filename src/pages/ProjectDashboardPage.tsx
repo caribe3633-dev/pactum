@@ -30,6 +30,8 @@ import ContextBar from '../components/ContextBar';
 import { useSectors, useCompany } from '../lib/useMasterData';
 // Phase 3G — opt-in sample data. Nothing seeds automatically any more.
 import LoadSampleData from '../components/LoadSampleData';
+// Baseline tab alert — approved sources newer than the package in force.
+import { packageLag } from '../lib/baselines';
 
 const TABS = [
   { id: 'overview',  icon: ClipboardList, en: 'Overview',           ar: 'نظرة عامة' },
@@ -59,6 +61,13 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
 
   const project = projects.find((p) => p.id === params.id);
   const perm = getProjectPermission(user, project?.id ?? '');
+
+  // Baseline tab alert — recomputed as the user moves around the project so
+  // a newly approved source version raises the mark without a reload.
+  const baselineLag = useMemo(
+    () => (project ? packageLag(project.id) : { behind: [], alert: false, awaitingFirstPackage: false }),
+    [project, activeTab],
+  );
 
   const sectors = useSectors();
   const sector = useMemo(
@@ -238,6 +247,17 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
               >
                 <tab.icon className="w-4 h-4 flex-shrink-0" />
                 <span>{tabLabel(tab)}</span>
+                {tab.id === 'baselines' && baselineLag.alert && (
+                  <span
+                    title={lang === 'ar'
+                      ? 'فيه مصادر معتمدة أحدث من حزمة خط الأساس السارية — يحتاج اعتماد حزمة جديدة'
+                      : 'Approved sources are newer than the package in force — a new Baseline Package approval is needed'}
+                    className="inline-flex items-center justify-center w-4 h-4 rounded-full flex-shrink-0"
+                    style={{ background: 'rgba(192,138,62,0.18)', color: 'var(--c-warning)', fontWeight: 700, fontSize: '10px' }}
+                  >
+                    !
+                  </span>
+                )}
               </button>
             );
           })}

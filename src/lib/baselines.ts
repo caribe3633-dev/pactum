@@ -1540,6 +1540,67 @@ export function packageHistory(store: BaselineStore): BaselinePackage[] {
   return (store.packages || []).slice().sort((a, b) => a.version - b.version);
 }
 
+/**
+ * PACKAGE LAG — has any source moved past the package in force?
+ *
+ * The scenario this answers: the current Baseline Package was built from
+ * Claims V1 (and friends), then a newer Claims V2 was approved. Nothing
+ * is broken — but the package no longer reflects the approved sources,
+ * and someone must notice and approve a new package.
+ *
+ * `alert` is true when:
+ *   - a package exists and at least one source's latest approved version
+ *     is newer than the version the package was built from, OR
+ *   - no package exists at all while every source already has an approved
+ *     version (ready to build, never built — BAC stays unavailable).
+ * It clears itself the moment the newer package is approved: the report
+ * is derived, never stored.
+ */
+export interface PackageLagItem {
+  kind: SourceKind;
+  /** Version the current package was built from. Null when not referenced. */
+  pkgVersion: number | null;
+  /** Latest approved version of this source. */
+  approvedVersion: number;
+}
+
+export interface PackageLagReport {
+  behind: PackageLagItem[];
+  /** True when the Baseline tab should carry the alert mark. */
+  alert: boolean;
+  /** True when all sources are approved but no package exists yet. */
+  awaitingFirstPackage: boolean;
+}
+
+export function packageLag(projectId: string): PackageLagReport {
+  const refs = __approvedRefs(projectId);
+  const readiness = __refsReadiness(projectId);
+  const pkg = currentPackage(readBaselines(projectId));
+
+  const REF_KEY: Record<SourceKind, keyof SourceRefs> = {
+    'contract': 'contract',
+    'budget': 'budget',
+    'cashflow': 'cashflow',
+    'evm-planned': 'evmPlanned',
+    'claims': 'claims',
+    'change-orders': 'changeOrders',
+  };
+
+  if (!pkg) {
+    return { behind: [], alert: readiness.ready, awaitingFirstPackage: readiness.ready };
+  }
+
+  const behind: PackageLagItem[] = [];
+  (Object.keys(REF_KEY) as SourceKind[]).forEach(k => {
+    const approvedV = refs[REF_KEY[k]]?.version ?? 0;
+    const pkgV = pkg.data.sourceRefs?.[REF_KEY[k]]?.version ?? 0;
+    if (approvedV > pkgV) {
+      behind.push({ kind: k, pkgVersion: pkgV || null, approvedVersion: approvedV });
+    }
+  });
+  return { behind, alert: behind.length > 0, awaitingFirstPackage: false };
+}
+
 /** The package in force. Null when none has been approved. */
 export function currentPackage(store: BaselineStore): BaselinePackage | null {
   const approved = (store.packages || []).filter(p => p.status === 'approved');

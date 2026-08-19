@@ -45,7 +45,7 @@ import {
   // the whole engine was unreachable from the UI.
   createPackageFromApprovedSources, approveAndActivate, rejectPackage,
   readBaselines as readPkgStore, packageHistory, currentPackage,
-  draftPackage as pkgDraft, packageLabel, evaluatePackageGate,
+  draftPackage as pkgDraft, packageLabel, evaluatePackageGate, packageLag,
   BaselineStore, BaselineRecord, BaselineType, BaselineCause, BaselineData,
 } from '../../lib/baselines';
 
@@ -247,21 +247,27 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
    * SOURCE APPROVAL CARDS — one card per source kind, AUTO-READ from the
    * versions store on every render. Green = approved with nothing pending;
    * red = a draft needs review, a submission awaits approval, or no
-   * version exists yet. This replaces the two static text lines.
+   * version exists yet; AMBER = a newer version was approved after the
+   * current Baseline Package was built — a new package approval is needed.
    */
+  const lag = useMemo(() => packageLag(project.id), [project.id, pkgTick, store]);
+
   const sourceCards = useMemo(() => {
     const sv = readSourceVersions(project.id);
     return SOURCE_KINDS.map(kind => {
       const approved = approvedOf(sv, kind);
       const open = openOf(sv, kind);
+      const lb = lag.behind.find(b => b.kind === kind);
       return {
         kind,
         approvedVersion: approved ? approved.version : null,
         openVersion: open ? open.version : null,
         openStatus: open ? open.status : null,
+        pkgVersion: lb ? lb.pkgVersion : null,
+        behind: !!lb,
       };
     });
-  }, [project.id, pkgTick, store]);
+  }, [project.id, pkgTick, store, lag]);
 
   /** Builds the next package DRAFT from the approved source versions. */
   const buildPackage = () => {
@@ -483,11 +489,14 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                 pending; red badge = action needed. */}
             <div className="ds-grid mt-3">
               {sourceCards.map(s => {
-                const ok = !s.openVersion && s.approvedVersion !== null;
+                const ok = !s.openVersion && s.approvedVersion !== null && !s.behind;
+                const amber = !s.openVersion && s.approvedVersion !== null && s.behind;
                 const meta = SOURCE_ICONS[s.kind] ?? { icon: History, color: 'text-muted-foreground' };
                 const Icon = meta.icon;
                 const badge = ok
                   ? <span className="badge badge-ok">{isRtl ? 'معتمدة ✓' : 'Approved ✓'}</span>
+                  : amber
+                  ? <span className="badge badge-warn">{isRtl ? 'نسخة أحدث معتمدة' : 'Newer approved'}</span>
                   : s.openStatus === 'submitted'
                   ? <span className="badge badge-risk">{isRtl ? 'تنتظر الاعتماد' : 'Awaiting'}</span>
                   : s.openStatus === 'draft'
@@ -498,7 +507,11 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                   : s.openVersion !== null
                   ? `V${s.openVersion}`
                   : '—';
-                const detail = s.openStatus === 'submitted'
+                const detail = amber
+                  ? (isRtl
+                      ? `الحزمة السارية مبنية من V${s.pkgVersion ?? '—'} — اعتمد حزمة جديدة (V${s.pkgVersion ?? '—'} ← V${s.approvedVersion})`
+                      : `package in force is built from V${s.pkgVersion ?? '—'} — approve a new package (V${s.pkgVersion ?? '—'} → V${s.approvedVersion})`)
+                  : s.openStatus === 'submitted'
                   ? (isRtl ? `مُقدَّمة V${s.openVersion} — تنتظر قرار الاعتماد` : `V${s.openVersion} submitted — awaiting approval`)
                   : s.openStatus === 'draft'
                   ? (isRtl ? `مسودة V${s.openVersion} — تحتاج مراجعة وإرسالًا` : `Draft V${s.openVersion} — needs review`)
@@ -506,13 +519,19 @@ export default function BaselineModule({ project, canEdit = true }: { project: P
                   ? (isRtl ? 'معتمدة وتقرأ تلقائيًا في الحزمة' : 'approved — auto-read by the package')
                   : (isRtl ? 'لا توجد نسخة بعد' : 'No version yet');
                 return (
-                  <div key={s.kind} className="ds-card ds-card-raised hover:bg-black/40 transition-colors">
+                  <div
+                    key={s.kind}
+                    className={cn(
+                      'ds-card ds-card-raised hover:bg-black/40 transition-colors',
+                      amber && 'bg-chart-5/[0.06] ring-1 ring-inset ring-chart-5/25',
+                    )}
+                  >
                     <div className="flex justify-between items-start !mt-0">
                       <Icon className={cn('w-5 h-5', meta.color, 'opacity-60')} />
                       {badge}
                     </div>
                     <div className="mb-2">
-                      <p className={cn('t-metric', ok ? 'kpi-v-ok' : 'text-(--c-destructive)')}>
+                      <p className={cn('t-metric', ok ? 'kpi-v-ok' : amber ? 'kpi-v-warn' : 'text-(--c-destructive)')}>
                         {version}
                       </p>
                     </div>
