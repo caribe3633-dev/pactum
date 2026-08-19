@@ -1,1 +1,1 @@
-Indirect EV fix: the stored value is now the month own increment between consecutive cumulative time bases — no more double counting in the cumulative EV; negative deltas (EOT stretching) clamp at zero
+Totals (PV/EV/AC) are now fully automatic and read-only: derived exclusively from Direct/Indirect components; manual total entry cancelled everywhere; pasting an Excel cumulative column converts to monthly Direct PV increments

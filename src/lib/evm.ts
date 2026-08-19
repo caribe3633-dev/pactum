@@ -1494,12 +1494,12 @@ export function setValue(
   const v = Number(value);
   if (!Number.isFinite(v)) return store;
 
-  // STEP 12 RULE, NOW ENFORCED: once a period carries a cost-class split,
-  // the total is not editable directly — that is exactly how total and
-  // components drift apart (dashboard showed the typed total while the
-  // Cost Class table summed its components). Edit Direct/Indirect instead;
-  // the parent recomputes from its components on every class write.
-  if (hasSplit(p)) return store;
+  /* OWNER'S RULE v3 — TOTALS ARE NEVER TYPED. pv/ev/ac are ALWAYS derived
+     from their cost-class components (per-period values summed cumulatively
+     by deriveClassTotals), with or without an existing split. Every manual
+     total path is closed: enter Direct/Indirect via the lenses and the
+     parent follows automatically. */
+  return store;
 
   const periods = store.periods.slice();
   const srcKey = (field + 'Source') as 'pvSource' | 'evSource' | 'acSource';
@@ -2067,18 +2067,33 @@ export function parsePvPaste(raw: string, editableCount: number): PvPasteResult 
  * lands on the editable periods only, in order. Switches the project to
  * manual distribution so the generator stops competing with the planner.
  */
+/**
+ * PASTE — a cumulative PV column from Excel/Primavera.
+ *
+ * v3: the pasted CUMULATIVE figures are converted to per-period increments
+ * and filed as DIRECT PV components; the parent totals re-derive through
+ * deriveClassTotals exactly as if each month had been typed by hand in the
+ * Direct lens. No total is ever written directly.
+ */
 export function applyPvColumn(store: EvmStore, values: number[]): {
   store: EvmStore; applied: number;
 } {
   let vi = 0;
+  let prevCum = 0;
   const periods = store.periods.map(p => {
     if (vi >= values.length) return p;
     if (p.status === 'approved' || p.frozen) return p;   // history is inert
-    const v = values[vi++];
-    return { ...p, pv: num(v), pvSource: 'manual' as Source };
+    const cum = num(values[vi++]);
+    const inc = Math.max(0, cum - prevCum);
+    prevCum = cum;
+    return { ...p, directPv: inc, directPvSource: 'manual' as Source, pvSource: 'manual' as Source };
   });
   return {
-    store: { ...store, periods, settings: { ...store.settings, pvMethod: 'manual' } },
+    store: {
+      ...store,
+      periods: deriveClassTotals(periods),
+      settings: { ...store.settings, pvMethod: 'manual' },
+    },
     applied: vi,
   };
 }

@@ -62,7 +62,9 @@ describe('Cost-class split invariant — regression tests', () => {
     delete (p as any).directEv; delete (p as any).indirectEv;
     delete (p as any).directAc; delete (p as any).indirectAc;
     const next = setValue(store([p]), 'p1', 'pv', 400_000);
-    expect(next.periods[0].pv).toBe(400_000);
+    // v3: totals are never typed — refused even without a split
+    expect(next.periods[0].pv).toBe(340_000);
+    expect((next.periods[0] as any).directPv).toBeUndefined();
   });
 
   it('4️⃣ setClassValue بيعيد حساب الإجمالي من المكونات', () => {
@@ -99,5 +101,22 @@ describe('Cost-class split invariant — regression tests', () => {
     expect(p.frozen?.ev).toBe(120_000);
     expect(p.frozen?.cpi).toBeCloseTo(120_000 / 150_000, 6);
     expect(p.frozen?.frozenAt).toBe('2026-02-01T00:00:00.000Z'); // الأثر الرقابي محفوظ
+  });
+});
+
+
+describe('applyPvColumn - paste writes components not totals', () => {
+  it("9: cumulative column becomes monthly increments in Direct PV and the total derives", async () => {
+    const { applyPvColumn } = await import('@/lib/evm');
+    const p1: any = { id: 'a1', seq: 1, start: '2026-01-01', end: '2026-01-31', label: 'M1', pv: 0, ev: 0, ac: 0, status: 'draft' };
+    const p2: any = { id: 'a2', seq: 2, start: '2026-02-01', end: '2026-02-28', label: 'M2', pv: 0, ev: 0, ac: 0, status: 'draft' };
+    const st: any = { settings: DEFAULT_SETTINGS, periods: [p1, p2] };
+    const res = applyPvColumn(st, [100, 250]);
+    expect(res.applied).toBe(2);
+    expect(res.store.periods[0].directPv).toBe(100);
+    expect(res.store.periods[1].directPv).toBe(150);
+    expect(res.store.periods[0].pv).toBe(100);
+    expect(res.store.periods[1].pv).toBe(250);
+    expect(res.store.periods[1].pvSource).toBe('manual');
   });
 });

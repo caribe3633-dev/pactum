@@ -1134,8 +1134,8 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
         {lens === 'total' && (
           <p className="text-(length:--t-second) text-muted-foreground mt-1">
             {isRtl
-              ? 'الأرقام في عدستي مباشرة/غير مباشرة هي قيمة الفترة نفسها — وعمود الإجمالي تراكمي: بيتحسب تلقائيًا من مجموع مكونات كل الفترات لحد نهاية كل فترة، ومش بيتكتب يدوي.'
-              : 'Direct/Indirect lenses take each period value itself — the Total column is cumulative: derived automatically as the running sum of every period components to date, never typed by hand.'}
+              ? 'الإجمالي (PV · EV · AC) كامل التلقائية ومقفول للكتابة: بيتحسب من مكونات مباشرة/غير مباشرة لكل فترة — والمكونات دي هي قيمة الفترة نفسها.'
+              : 'Totals (PV · EV · AC) are fully automatic and read-only: derived from each period Direct/Indirect components — which hold the period own value.'}
           </p>
         )}
 
@@ -1344,17 +1344,18 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                         typed. It renders read-only and says why.
                       */}
                       {lens === 'total' ? (
+                        /* v3 — totals are READ-ONLY: always derived from the
+                           Direct/Indirect components. canWrite=false on every
+                           cell closes the manual path at the UI as well. */
                         <>
-                          <ValueCell ccy={ccy} v={p.pv} src={p.pvSource} locked={locked} canWrite={canWrite}
-                                     onSave={x => edit(p.id, 'pv', x)} onAuto={() => unlock(p.id, 'pv')} />
-                          <ValueCell ccy={ccy} v={p.ev} src={p.evSource} locked={locked} canWrite={canWrite}
-                                     onSave={x => edit(p.id, 'ev', x)} onAuto={() => unlock(p.id, 'ev')} />
-                          {/* STEP 11 — AC is Finance-entered. `notEntered` makes
-                              absence visible instead of printing a zero nobody
-                              typed. An entered 0 is a fact and still prints. */}
-                          <ValueCell ccy={ccy} v={p.ac} src={p.acSource} locked={locked} canWrite={canWrite}
+                          <ValueCell ccy={ccy} v={p.pv} src={p.pvSource} locked={locked} canWrite={false}
+                                     onSave={() => {}} onAuto={() => {}} />
+                          <ValueCell ccy={ccy} v={p.ev} src={p.evSource} locked={locked} canWrite={false}
+                                     onSave={() => {}} onAuto={() => {}} />
+                          {/* STEP 11 — absence still reads as absence. */}
+                          <ValueCell ccy={ccy} v={p.ac} src={p.acSource} locked={locked} canWrite={false}
                                      notEntered={p.acSource !== 'manual'} isRtl={isRtl}
-                                     onSave={x => edit(p.id, 'ac', x)} onAuto={() => unlock(p.id, 'ac')} />
+                                     onSave={() => {}} onAuto={() => {}} />
                         </>
                       ) : lens === 'direct' ? (
                         <>
