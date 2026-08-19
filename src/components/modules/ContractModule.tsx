@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Save, Info, Plus, Trash2, ExternalLink, FileSignature, Landmark, Clock, CalendarCheck, Link2, FileText } from 'lucide-react';
+import { Save, Info, Plus, Trash2, ExternalLink, FileSignature, Landmark, Clock, CalendarCheck, Link2, FileText, GitBranch, AlertTriangle } from 'lucide-react';
 import { useTranslation } from '../../lib/i18n';
 import { useProjects, useAuth } from '../../lib/store';
 import { useProjectCurrency } from '../../lib/useProjectCurrency';
@@ -11,6 +11,10 @@ import { abbrevMoney, exactMoney } from '../../lib/moneyFormat';
 import { formatDateOrDash, toInputDate } from '../../lib/dateFormat';
 import { cn } from '../../lib/utils';
 import { Project } from '../../lib/data';
+import {
+  CONTRACT_PHASE_GROUPS, CONTRACT_PHASE_EXCEPTIONS,
+  contractPhaseOption, contractPhaseGroupOf, isContractPhaseException,
+} from '../../lib/contractPhases';
 import SourceVersionsPanel from '../SourceVersionsPanel';
 
 /**
@@ -78,6 +82,15 @@ export default function ContractModule({ project, canEdit = true }: { project: P
 
   const [draftValue, setDraftValue] = useState<string>('');
   const [savedFlash, setSavedFlash] = useState(false);
+
+  // ── Contract phase (state) card ──
+  const phase = contractPhaseOption(project.contractPhase);
+  const phaseGroup = contractPhaseGroupOf(project.contractPhase);
+  const phaseException = isContractPhaseException(project.contractPhase ?? '');
+  const phaseRisky = phaseException || project.contractPhase === 'SUSPENDED';
+  const setPhase = (value: string) => {
+    updateProject({ ...project, contractPhase: value });
+  };
 
   /** Same computation path as Overview — single authority. */
   const totals = useMemo(
@@ -226,6 +239,49 @@ export default function ContractModule({ project, canEdit = true }: { project: P
               ? `تعاقدي + EOT معتمد (${eot.totalApprovedEOT} يوم)`
               : `contractual + approved EOT (${eot.totalApprovedEOT}d)`}
           </p>
+        </div>
+      ),
+    },
+    {
+      key: 'phase',
+      icon: phaseRisky ? AlertTriangle : GitBranch,
+      color: phaseRisky ? 'text-chart-3' : 'text-chart-4',
+      badge: <span className="badge badge-neutral">{isRtl ? 'يدوي' : 'Manual'}</span>,
+      label: isRtl ? 'حالة العقد (Phase)' : 'Contract Phase',
+      node: (
+        <div>
+          <p className={cn('t-metric !text-(length:--t-large)', phaseRisky ? 'kpi-v-warn' : '')}>
+            {phase ? (isRtl ? phase.ar : phase.en) : (isRtl ? 'لم ت\u062cحدد' : 'Not set')}
+          </p>
+          <p className="kpi-sub text-muted-foreground mt-1 font-mono">
+            {phase
+              ? `${phase.value}${phaseGroup ? ` · ${isRtl ? phaseGroup.ar : phaseGroup.en}` : phaseException ? (isRtl ? ' · حالة استثنائية' : ' · exception') : ''}`
+              : (isRtl ? 'اختر الحالة من القائمة' : 'pick a status below')}
+          </p>
+          {phase && (
+            <p className="kpi-sub text-muted-foreground/80 mt-1 max-w-md">{phase.desc}</p>
+          )}
+          {canEdit && (
+            <select
+              className="field-input !py-1.5 mt-2 max-w-md"
+              value={project.contractPhase ?? ''}
+              onChange={e => setPhase(e.target.value)}
+            >
+              <option value="">{isRtl ? '— اختر حالة العقد —' : '— select contract phase —'}</option>
+              {CONTRACT_PHASE_GROUPS.map(g => (
+                <optgroup key={g.key} label={`${g.key}. ${isRtl ? g.ar : g.en}`}>
+                  {g.options.map(o => (
+                    <option key={o.value} value={o.value}>{isRtl ? o.ar : o.en}</option>
+                  ))}
+                </optgroup>
+              ))}
+              <optgroup label={isRtl ? 'حالات استثنائية' : 'Exceptions'}>
+                {CONTRACT_PHASE_EXCEPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{isRtl ? o.ar : o.en}</option>
+                ))}
+              </optgroup>
+            </select>
+          )}
         </div>
       ),
     },

@@ -1,1 +1,1 @@
-Unified EV numbering: approving/activating EVM Baseline V3 now files source version V3 — one number everywhere (badge, Baseline card, package). Badge simplified to: Feb 2024 · EV V3 approved. Opens of the EV tab self-converge legacy data.
+Contract tab: new Contract Phase card — pick from the full lifecycle (Pre-Award to Closed + Terminated/Liquidated exceptions) with code, Arabic label and professional description; saved on the project record

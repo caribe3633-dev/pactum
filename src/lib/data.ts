@@ -37,6 +37,12 @@ export interface Project {
 
   /** Lifecycle state. Absent means Active. Archived rows are hidden. */
   status?: 'Active' | 'On Hold' | 'Completed' | 'Archived';
+  /**
+   * CONTRACT PHASE — المرحلة التعاقدية (من تاب العقد).
+   * اختيارية: المشاريع اللي اتخزنت قبل الكارت مالهاش قيمة = "لم تُحدد".
+   * التصنيف الكامل في lib/contractPhases.ts
+   */
+  contractPhase?: string;
   archivedAt?: string;
   archivedBy?: string;
   /**
