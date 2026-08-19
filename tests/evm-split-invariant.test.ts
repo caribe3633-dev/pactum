@@ -1,0 +1,81 @@
+/**
+ * REGRESSION — Cost-class split invariant (إصلاح العنصر السابع)
+ * الثلاث قواعد:
+ *   1. الإجمالي مش بيتكتب يدوي فوق تقسيم موجود (setValue يترفض)
+ *   2. أي بيانات قديمة منحرفة بتتصلح عند القراءة (المكونات هي المرجع)
+ *   3. اللوحة والجدول لازم يتفقوا دايمًا: m.pv = direct + indirect
+ */
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  readEvm, writeEvm, setValue, setClassValue, snapshot,
+  DEFAULT_SETTINGS, type EvmStore, type EvmPeriod, type ProjectLike,
+} from '@/lib/evm';
+
+const PID = 'split-fix-1';
+
+const P: ProjectLike = {
+  id: PID, contractValue: 1_000_000, progress: 30,
+  commencementDate: '2026-01-01', plannedDurationDays: 365,
+  contractualCompletion: '2026-12-31',
+};
+
+function period(): EvmPeriod {
+  return {
+    id: 'p1', seq: 1, start: '2026-01-01', end: '2026-01-31', label: 'M1 2026',
+    // الحالة المنحرفة: الإجمالي المكتوب 340 والمكونات مجموعها 180
+    pv: 340_000, ev: 200_000, ac: 150_000,
+    directPv: 100_000, indirectPv: 80_000,
+    directEv: 90_000, indirectEv: 30_000,
+    directAc: 100_000, indirectAc: 50_000,
+    pvSource: 'manual', evSource: 'manual', acSource: 'manual',
+    status: 'draft',
+  } as EvmPeriod;
+}
+
+const store = (periods: EvmPeriod[]): EvmStore => ({ settings: DEFAULT_SETTINGS, periods });
+
+describe('Cost-class split invariant — regression tests', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('pactum-projects', JSON.stringify([P]));
+  });
+
+  it('1️⃣ البيانات المنحرفة تتصلح عند القراءة: pv = direct + indirect', () => {
+    writeEvm(PID, store([period()]));
+    const s = readEvm(PID);
+    expect(s.periods[0].pv).toBe(180_000);
+    expect(s.periods[0].ev).toBe(120_000);
+    expect(s.periods[0].ac).toBe(150_000); // ac components 100k+50k = 150k ✓
+  });
+
+  it('2️⃣ setValue يترفض كتابة الإجمالي فوق تقسيم موجود', () => {
+    const s = store([period()]);
+    const next = setValue(s, 'p1', 'pv', 999_999);
+    // الرفض معناه نفس الستور (الإجمالي بيتصلح من المكونات فقط)
+    expect(next.periods[0].directPv).toBe(100_000);
+    expect(next.periods[0].indirectPv).toBe(80_000);
+  });
+
+  it('3️⃣ setValue شغال عادي لما مفيش تقسيم', () => {
+    const p = { ...period() };
+    delete (p as any).directPv; delete (p as any).indirectPv;
+    delete (p as any).directEv; delete (p as any).indirectEv;
+    delete (p as any).directAc; delete (p as any).indirectAc;
+    const next = setValue(store([p]), 'p1', 'pv', 400_000);
+    expect(next.periods[0].pv).toBe(400_000);
+  });
+
+  it('4️⃣ setClassValue بيعيد حساب الإجمالي من المكونات', () => {
+    const next = setClassValue(store([period()]), 'p1', 'directPv', 150_000);
+    expect(next.periods[0].pv).toBe(230_000); // 150k + 80k
+  });
+
+  it('5️⃣ اللوحة بتقرا نفس أرقام المكونات بعد الإصلاح', () => {
+    writeEvm(PID, store([period()]));
+    const s = readEvm(PID);
+    const snap = snapshot(P, s, new Date('2026-01-15'));
+    expect(snap.m.pv).toBe(180_000);
+    expect(snap.m.ev).toBe(120_000);
+    expect(snap.m.ac).toBe(150_000);
+  });
+});

@@ -1,1 +1,1 @@
-EVM fix: cumulative PV/EV/AC cards now reflect the live current period you type into (were stuck on the last approved period); PV-only planning periods count toward the basis; zero rows show null indices instead of borrowed ones
+EVM fix: Performance by Cost Class now always sums correctly — totals are locked once a split exists (edit Direct/Indirect instead), and previously drifted data (like 340k vs 180k) self-repairs on first load. Includes both EVM fixes: live current period reporting + split invariant

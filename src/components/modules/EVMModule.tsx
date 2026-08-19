@@ -1049,6 +1049,15 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
           )}
         </div>
 
+        {/* Total lens + split: totals are component-derived and locked */}
+        {lens === 'total' && (
+          <p className="text-(length:--t-second) text-muted-foreground mt-1">
+            {isRtl
+              ? 'الفترات اللي فيها تقسيم فئات (Direct/Indirect): الإجمالي بيتحسب من مكوناته تلقائيًا ومش بيتكتب يدوي — عدّل من عدسة مباشرة/غير مباشرة.'
+              : 'Periods carrying a cost-class split: the total is derived from its components and is not typed directly — edit via the Direct/Indirect lens.'}
+          </p>
+        )}
+
         {/*
           Q2=C — an approved EOT with no effective date makes the time
           basis unknowable. Say so, name the rows, and refuse to compute.

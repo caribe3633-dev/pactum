@@ -355,6 +355,34 @@ function cleanBaseline(b: any, i: number): Baseline {
   };
 }
 
+/**
+ * REPAIR ON READ — re-syncs drifted split totals (legacy data).
+ *
+ * Before the Step 12 rule was enforced in `setValue`, a total could be
+ * typed over an existing split, leaving `pv` (or ev/ac) disagreeing with
+ * its own components — dashboards showed one number, the Cost Class table
+ * another. Components are authoritative once a split exists, so on read
+ * every non-frozen period's totals are recomputed from their components.
+ * A total whose components were never entered is left untouched, and
+ * frozen (signed-off) periods are never rewritten.
+ */
+function repairSplitTotals(periods: EvmPeriod[]): EvmPeriod[] {
+  return periods.map(p => {
+    if (p.frozen || !hasSplit(p)) return p;
+    const next = { ...p };
+    if (p.directPv !== undefined || p.indirectPv !== undefined) {
+      next.pv = num(p.directPv) + num(p.indirectPv);
+    }
+    if (p.directEv !== undefined || p.indirectEv !== undefined) {
+      next.ev = num(p.directEv) + num(p.indirectEv);
+    }
+    if (p.directAc !== undefined || p.indirectAc !== undefined) {
+      next.ac = num(p.directAc) + num(p.indirectAc);
+    }
+    return next;
+  });
+}
+
 export function readEvm(projectId: string): EvmStore {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY(projectId)) || 'null');
@@ -369,7 +397,7 @@ export function readEvm(projectId: string): EvmStore {
         activeBaselineId: s.activeBaselineId ? String(s.activeBaselineId) : '',
         pvMethod: ['scurve','front','back','linear','manual'].includes(s.pvMethod) ? s.pvMethod : 'scurve',
       },
-      periods: Array.isArray(raw.periods) ? raw.periods.map(cleanPeriod) : [],
+      periods: Array.isArray(raw.periods) ? repairSplitTotals(raw.periods.map(cleanPeriod)) : [],
       baselines: Array.isArray(raw.baselines) ? raw.baselines.map(cleanBaseline) : [],
     };
   } catch {
@@ -1441,6 +1469,13 @@ export function setValue(
   if (value === null || value === undefined || (typeof value === 'string' && String(value).trim() === '')) return store;
   const v = Number(value);
   if (!Number.isFinite(v)) return store;
+
+  // STEP 12 RULE, NOW ENFORCED: once a period carries a cost-class split,
+  // the total is not editable directly — that is exactly how total and
+  // components drift apart (dashboard showed the typed total while the
+  // Cost Class table summed its components). Edit Direct/Indirect instead;
+  // the parent recomputes from its components on every class write.
+  if (hasSplit(p)) return store;
 
   const periods = store.periods.slice();
   const srcKey = (field + 'Source') as 'pvSource' | 'evSource' | 'acSource';
