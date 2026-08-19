@@ -1,1 +1,1 @@
-Baseline page: lower family section removed (selector, update banner, family detail) — page is now sources + Package + read-only register
+EVM fix: cumulative PV/EV/AC cards now reflect the live current period you type into (were stuck on the last approved period); PV-only planning periods count toward the basis; zero rows show null indices instead of borrowed ones

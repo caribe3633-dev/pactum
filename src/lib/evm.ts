@@ -960,7 +960,12 @@ export function cumulativeTo(periods: EvmPeriod[], upTo: EvmPeriod | null): Cumu
   if (idx < 0) return empty;
 
   const history = periods.slice(0, idx + 1);
-  const withData = history.filter(p => p.ev > 0 || p.ac > 0 || p.status === 'approved');
+  // FIX: a PV-only period (planning stage) is real data — excluding it kept
+  // the cumulative basis stuck on an older period and SPI/EAC answered
+  // against a stale PV.
+  const withData = history.filter(
+    p => p.ev > 0 || p.ac > 0 || p.pv > 0 || p.status === 'approved',
+  );
   if (withData.length === 0) return empty;
 
   // Cumulative totals are the LAST period's stored cumulative values.
@@ -1091,12 +1096,29 @@ export function latestApproved(periods: EvmPeriod[]): EvmPeriod | null {
   return approved.length ? approved[approved.length - 1] : null;
 }
 
-/** Approved if any exist, otherwise the live period, so the page is never blank. */
+/**
+ * The period the dashboard reports on.
+ *
+ * FIX (user report: "cumulative totals look wrong"): the dashboard used to
+ * pin itself to the LATEST APPROVED period and ignore the live period the
+ * user is typing into — so freshly entered cumulative PV/EV/AC never showed
+ * and the cards looked stale/incorrect. Rule now:
+ *
+ *   1. the CURRENT period by date, if it carries any entered figure;
+ *   2. else the latest approved period (nothing entered yet this period);
+ *   3. else the current period anyway, so the page is never blank.
+ *
+ * Approved ACTUALS stay frozen on their rows and the history table still
+ * prints them — this only changes which period the headline cards report.
+ */
 export function reportingPeriod(periods: EvmPeriod[], today = new Date()): EvmPeriod | null {
+  if (periods.length === 0) return null;
+  const i = currentPeriodIndex(periods, today);
+  const cur = i >= 0 ? periods[i] : null;
+  if (cur && (cur.pv > 0 || cur.ev > 0 || cur.ac > 0)) return cur;
   const a = latestApproved(periods);
   if (a) return a;
-  const i = currentPeriodIndex(periods, today);
-  return i >= 0 ? periods[i] : null;
+  return cur ?? periods[periods.length - 1] ?? null;
 }
 
 export interface SeriesPoint {
@@ -1364,6 +1386,11 @@ export function periodMetrics(
   }
   const base = metricsFor(p.pv, p.ev, p.ac, liveBac, method);
   if (!cum) return base;
+  // FIX: an empty live row (no figure at all) must not borrow an older
+  // period's indices — that fabricated SPI/CPI on zero rows. Only a row
+  // that actually carries data answers from cumulative history.
+  const rowHasData = p.pv > 0 || p.ev > 0 || p.ac > 0 || p.status === 'approved';
+  if (!rowHasData) return base;
   // Live periods forecast from cumulative history, not from this row alone.
   const { eac } = eacFor(method, liveBac, p.ev, p.ac, cum.cpiCum, cum.spiCum);
   const safe = Number.isFinite(eac) ? eac : liveBac;
