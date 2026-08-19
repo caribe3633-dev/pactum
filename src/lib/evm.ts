@@ -368,16 +368,38 @@ function cleanBaseline(b: any, i: number): Baseline {
  */
 function repairSplitTotals(periods: EvmPeriod[]): EvmPeriod[] {
   return periods.map(p => {
-    if (p.frozen || !hasSplit(p)) return p;
-    const next = { ...p };
+    if (!hasSplit(p)) return p;
+    const next: EvmPeriod = { ...p };
+    let pvT = false, evT = false, acT = false;
     if (p.directPv !== undefined || p.indirectPv !== undefined) {
-      next.pv = num(p.directPv) + num(p.indirectPv);
+      next.pv = num(p.directPv) + num(p.indirectPv); pvT = true;
     }
     if (p.directEv !== undefined || p.indirectEv !== undefined) {
-      next.ev = num(p.directEv) + num(p.indirectEv);
+      next.ev = num(p.directEv) + num(p.indirectEv); evT = true;
     }
     if (p.directAc !== undefined || p.indirectAc !== undefined) {
-      next.ac = num(p.directAc) + num(p.indirectAc);
+      next.ac = num(p.directAc) + num(p.indirectAc); acT = true;
+    }
+    // v2: approved/frozen periods are repaired too. An approved record whose
+    // total contradicts its own components is internally inconsistent — the
+    // decomposition was signed with the period, so components win. The frozen
+    // metrics are re-derived with the SAME method the period was signed with;
+    // frozenAt / baselineId (the audit trail) are preserved untouched.
+    if (p.frozen && (pvT || evT || acT)) {
+      const f = p.frozen;
+      const rec = metricsFor(
+        pvT ? next.pv : f.pv,
+        evT ? next.ev : f.ev,
+        acT ? next.ac : f.ac,
+        f.bac,
+        f.eacMethod,
+      );
+      next.frozen = {
+        ...f,
+        pv: rec.pv, ev: rec.ev, ac: rec.ac,
+        sv: rec.sv, cv: rec.cv, spi: rec.spi, cpi: rec.cpi,
+        eac: rec.eac, etc: rec.etc, vac: rec.vac, tcpi: rec.tcpi,
+      };
     }
     return next;
   });

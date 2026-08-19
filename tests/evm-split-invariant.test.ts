@@ -78,4 +78,26 @@ describe('Cost-class split invariant — regression tests', () => {
     expect(snap.m.ev).toBe(120_000);
     expect(snap.m.ac).toBe(150_000);
   });
+
+  it('6️⃣ الفترات المعتمدة/المجمدة بتتصلح هي كمان (بما فيها السجل الموقّع)', () => {
+    const approved = {
+      ...period(),
+      id: 'p1f', status: 'approved' as const,
+      frozen: {
+        pv: 340_000, ev: 200_000, ac: 150_000, bac: 1_000_000,
+        spi: 200_000 / 340_000, cpi: 200_000 / 150_000,
+        sv: 200_000 - 340_000, cv: 200_000 - 150_000,
+        eac: 1_000_000 / (200_000 / 150_000), etc: 0, vac: 0, tcpi: null,
+        eacMethod: 'cpi' as const, frozenAt: '2026-02-01T00:00:00.000Z', baselineId: 'b1',
+      },
+    } as EvmPeriod;
+    writeEvm(PID, store([approved]));
+    const s = readEvm(PID);
+    const p = s.periods[0];
+    expect(p.pv).toBe(180_000);           // الإجمالي اتصلح
+    expect(p.frozen?.pv).toBe(180_000);   // والسجل الموقّع اتزامن
+    expect(p.frozen?.ev).toBe(120_000);
+    expect(p.frozen?.cpi).toBeCloseTo(120_000 / 150_000, 6);
+    expect(p.frozen?.frozenAt).toBe('2026-02-01T00:00:00.000Z'); // الأثر الرقابي محفوظ
+  });
 });

@@ -1,1 +1,0 @@
-EVM fix: Performance by Cost Class now always sums correctly — totals are locked once a split exists (edit Direct/Indirect instead), and previously drifted data (like 340k vs 180k) self-repairs on first load. Includes both EVM fixes: live current period reporting + split invariant
