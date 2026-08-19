@@ -1,1 +1,1 @@
-Contract tab: new Contract Phase card — pick from the full lifecycle (Pre-Award to Closed + Terminated/Liquidated exceptions) with code, Arabic label and professional description; saved on the project record
+Timeline: Base Currency and Exchange Rate fields removed from the approval form; Timeline tab now shows an alert mark when an approved Baseline Package exists but no timeline snapshot has been approved

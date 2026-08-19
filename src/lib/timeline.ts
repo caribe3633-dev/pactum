@@ -42,6 +42,8 @@
  *   behave.
  * ══════════════════════════════════════════════════════════════════════
  */
+import { currentPackage, readBaselines } from './baselines';
+
 
 // ── Snapshot model ─────────────────────────────────────────────────────
 
@@ -743,6 +745,18 @@ export function setReportingCurrency(projectId: string, currency: string): Timel
 // ── Queries ────────────────────────────────────────────────────────────
 
 /** Approved snapshots only, oldest first. */
+/**
+ * TIMELINE TAB ALERT — an approved Baseline Package exists, but this
+ * project has no approved timeline snapshot yet. The plan was signed but
+ * its time picture never was; the Timeline tab carries the mark until a
+ * timeline approval lands. Derived — clears itself the moment one does.
+ */
+export function timelineNeedsAttention(projectId: string): boolean {
+  const pkg = currentPackage(readBaselines(projectId));
+  if (!pkg) return false;
+  return approvedSnapshots(readTimeline(projectId)).length === 0;
+}
+
 export function approvedSnapshots(store: TimelineStore): TimelineSnapshot[] {
   return store.snapshots.filter(s => s.status === 'approved');
 }

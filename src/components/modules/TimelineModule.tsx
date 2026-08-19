@@ -464,32 +464,9 @@ export default function TimelineModule({ project, canEdit = true }: { project: P
                 <input className="field-input" value={note} onChange={e => setNote(e.target.value)}
                        placeholder={isRtl ? 'مرجع محضر الإغلاق الشهري' : 'Month-end close reference'} />
               </div>
-              <div className="field">
-                <label className="field-label">{isRtl ? 'عملة الأساس' : 'Base Currency'}</label>
-                {/* Stated, not chosen — see the note on `baseCcy`. */}
-                <div className="field-input font-mono flex items-center justify-between">
-                  <span>{baseCcy}</span>
-                  <span className="text-(length:--t-micro) text-muted-foreground uppercase tracking-wider">
-                    {isRtl ? 'عملة العقد' : 'contract currency'}
-                  </span>
-                </div>
-              </div>
-              <div className="field">
-                <label className="field-label">
-                  {isRtl ? 'سعر الصرف' : 'Exchange Rate'}
-                  <span className="text-muted-foreground ms-2 normal-case tracking-normal">
-                    {isRtl ? 'يُحفظ فقط' : 'stored only'}
-                  </span>
-                </label>
-                <input className="field-input font-mono number-ltr" type="number" step="0.0001" dir="ltr"
-                       value={rate} onChange={e => setRate(e.target.value)} />
-              </div>
+              {/* Base Currency + Exchange Rate fields removed by request —
+                  the currency facts stay filed with the snapshot internally. */}
             </div>
-            <p className="text-(length:--t-second) text-muted-foreground italic mt-1">
-              {isRtl
-                ? 'سعر الصرف يُحفظ مع الفترة ولا يُطبَّق على أي رقم. محرك العملات لم يُنفَّذ بعد — المحفوظ هو الحقيقة التي لا يمكن استرجاعها لاحقاً.'
-                : 'The rate is filed with the period and applied to nothing. No currency engine exists yet — what is preserved is the fact that cannot be reconstructed later.'}
-            </p>
 
             <div className="form-actions">
               <button type="button" onClick={() => setConfirming(false)} className="btn btn-ghost">

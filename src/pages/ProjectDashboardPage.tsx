@@ -32,6 +32,7 @@ import { useSectors, useCompany } from '../lib/useMasterData';
 import LoadSampleData from '../components/LoadSampleData';
 // Baseline tab alert — approved sources newer than the package in force.
 import { packageLag } from '../lib/baselines';
+import { timelineNeedsAttention } from '../lib/timeline';
 
 const TABS = [
   { id: 'overview',  icon: ClipboardList, en: 'Overview',           ar: 'نظرة عامة' },
@@ -66,6 +67,13 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
   // a newly approved source version raises the mark without a reload.
   const baselineLag = useMemo(
     () => (project ? packageLag(project.id) : { behind: [], alert: false, awaitingFirstPackage: false }),
+    [project, activeTab],
+  );
+
+  // Timeline tab alert — an approved Baseline Package exists while this
+  // project has no approved timeline snapshot yet.
+  const timelineAlert = useMemo(
+    () => (project ? timelineNeedsAttention(project.id) : false),
     [project, activeTab],
   );
 
@@ -247,11 +255,15 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
               >
                 <tab.icon className="w-4 h-4 flex-shrink-0" />
                 <span>{tabLabel(tab)}</span>
-                {tab.id === 'baselines' && baselineLag.alert && (
+                {((tab.id === 'baselines' && baselineLag.alert) || (tab.id === 'timeline' && timelineAlert)) && (
                   <span
-                    title={lang === 'ar'
-                      ? 'فيه مصادر معتمدة أحدث من حزمة خط الأساس السارية — يحتاج اعتماد حزمة جديدة'
-                      : 'Approved sources are newer than the package in force — a new Baseline Package approval is needed'}
+                    title={tab.id === 'timeline'
+                      ? (lang === 'ar'
+                          ? 'فيه حزمة خط أساس معتمدة وما فيش تايم لاين معتمد بعد — اعتمد لقطة التايم لاين'
+                          : 'An approved Baseline Package exists with no approved timeline snapshot yet — approve a timeline period')
+                      : (lang === 'ar'
+                          ? 'فيه مصادر معتمدة أحدث من حزمة خط الأساس السارية — يحتاج اعتماد حزمة جديدة'
+                          : 'Approved sources are newer than the package in force — a new Baseline Package approval is needed')}
                     className="inline-flex items-center justify-center w-4 h-4 rounded-full flex-shrink-0"
                     style={{ background: 'rgba(192,138,62,0.18)', color: 'var(--c-warning)', fontWeight: 700, fontSize: '10px' }}
                   >
