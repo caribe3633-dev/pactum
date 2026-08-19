@@ -1049,12 +1049,12 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
           )}
         </div>
 
-        {/* Total lens + split: totals are component-derived and locked */}
+        {/* Total lens + split: totals are cumulative, derived from components */}
         {lens === 'total' && (
           <p className="text-(length:--t-second) text-muted-foreground mt-1">
             {isRtl
-              ? 'الفترات اللي فيها تقسيم فئات (Direct/Indirect): الإجمالي بيتحسب من مكوناته تلقائيًا ومش بيتكتب يدوي — عدّل من عدسة مباشرة/غير مباشرة.'
-              : 'Periods carrying a cost-class split: the total is derived from its components and is not typed directly — edit via the Direct/Indirect lens.'}
+              ? 'الأرقام في عدستي مباشرة/غير مباشرة هي قيمة الفترة نفسها — وعمود الإجمالي تراكمي: بيتحسب تلقائيًا من مجموع مكونات كل الفترات لحد نهاية كل فترة، ومش بيتكتب يدوي.'
+              : 'Direct/Indirect lenses take each period value itself — the Total column is cumulative: derived automatically as the running sum of every period components to date, never typed by hand.'}
           </p>
         )}
 
@@ -1426,7 +1426,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
           ══════════════════════════════════════════════════════════════
         */}
         {period && bacSplit.available && hasSplit(period) && (() => {
-          const cm = classMetrics(period, bacSplit, store.settings.eacMethod);
+          const cm = classMetrics(store.periods, period, bacSplit, store.settings.eacMethod);
           const rows = [
             { k: isRtl ? 'مباشرة' : 'Direct',      m: cm.direct },
             { k: isRtl ? 'غير مباشرة' : 'Indirect', m: cm.indirect },

@@ -356,53 +356,55 @@ function cleanBaseline(b: any, i: number): Baseline {
 }
 
 /**
- * REPAIR ON READ — re-syncs drifted split totals (legacy data).
+ * STEP 12 v3 — COMPONENTS ARE PER-PERIOD, TOTALS ARE CUMULATIVE.
  *
- * Before the Step 12 rule was enforced in `setValue`, a total could be
- * typed over an existing split, leaving `pv` (or ev/ac) disagreeing with
- * its own components — dashboards showed one number, the Cost Class table
- * another. Components are authoritative once a split exists, so on read
- * every non-frozen period's totals are recomputed from their components.
- * A total whose components were never entered is left untouched, and
- * frozen (signed-off) periods are never rewritten.
+ * The Direct / Indirect figures entered on each period are THAT PERIOD'S
+ * own value (the month's increment). The parent pv/ev/ac of every period
+ * are CUMULATIVE: running sums of the components of every period up to
+ * and including it, starting from the last typed cumulative total before
+ * the split began (so mixed histories keep their typed base).
+ *
+ * - Any period from the first split onward has its totals DERIVED here.
+ * - Approved/frozen periods are re-derived too, and their signed snapshot
+ *   is re-synced with the SAME method it was signed with. The audit trail
+ *   (frozenAt / baselineId) is preserved untouched.
  */
-function repairSplitTotals(periods: EvmPeriod[]): EvmPeriod[] {
-  return periods.map(p => {
-    if (!hasSplit(p)) return p;
-    const next: EvmPeriod = { ...p };
-    let pvT = false, evT = false, acT = false;
-    if (p.directPv !== undefined || p.indirectPv !== undefined) {
-      next.pv = num(p.directPv) + num(p.indirectPv); pvT = true;
-    }
-    if (p.directEv !== undefined || p.indirectEv !== undefined) {
-      next.ev = num(p.directEv) + num(p.indirectEv); evT = true;
-    }
-    if (p.directAc !== undefined || p.indirectAc !== undefined) {
-      next.ac = num(p.directAc) + num(p.indirectAc); acT = true;
-    }
-    // v2: approved/frozen periods are repaired too. An approved record whose
-    // total contradicts its own components is internally inconsistent — the
-    // decomposition was signed with the period, so components win. The frozen
-    // metrics are re-derived with the SAME method the period was signed with;
-    // frozenAt / baselineId (the audit trail) are preserved untouched.
-    if (p.frozen && (pvT || evT || acT)) {
-      const f = p.frozen;
-      const rec = metricsFor(
-        pvT ? next.pv : f.pv,
-        evT ? next.ev : f.ev,
-        acT ? next.ac : f.ac,
-        f.bac,
-        f.eacMethod,
-      );
-      next.frozen = {
+function deriveClassTotals(periods: EvmPeriod[]): EvmPeriod[] {
+  const fields = [
+    { m: 'pv', d: 'directPv', i: 'indirectPv' },
+    { m: 'ev', d: 'directEv', i: 'indirectEv' },
+    { m: 'ac', d: 'directAc', i: 'indirectAc' },
+  ] as const;
+
+  let out = periods.slice();
+  for (const { m, d, i } of fields) {
+    const first = out.findIndex(p => p[d] !== undefined || p[i] !== undefined);
+    if (first < 0) continue; // this metric was never split — typed totals stand
+    const base = first > 0 ? out[first - 1][m] : 0;
+    let running = base;
+    out = out.map((p, idx) => {
+      if (idx < first) return p;
+      running += num(p[d]) + num(p[i]);
+      return { ...p, [m]: running } as EvmPeriod;
+    });
+  }
+
+  // Keep every signed snapshot consistent with its own (re-derived) totals.
+  out = out.map(p => {
+    if (!p.frozen) return p;
+    const f = p.frozen;
+    const rec = metricsFor(p.pv, p.ev, p.ac, f.bac, f.eacMethod);
+    return {
+      ...p,
+      frozen: {
         ...f,
         pv: rec.pv, ev: rec.ev, ac: rec.ac,
         sv: rec.sv, cv: rec.cv, spi: rec.spi, cpi: rec.cpi,
         eac: rec.eac, etc: rec.etc, vac: rec.vac, tcpi: rec.tcpi,
-      };
-    }
-    return next;
+      },
+    };
   });
+  return out;
 }
 
 export function readEvm(projectId: string): EvmStore {
@@ -419,7 +421,7 @@ export function readEvm(projectId: string): EvmStore {
         activeBaselineId: s.activeBaselineId ? String(s.activeBaselineId) : '',
         pvMethod: ['scurve','front','back','linear','manual'].includes(s.pvMethod) ? s.pvMethod : 'scurve',
       },
-      periods: Array.isArray(raw.periods) ? repairSplitTotals(raw.periods.map(cleanPeriod)) : [],
+      periods: Array.isArray(raw.periods) ? deriveClassTotals(raw.periods.map(cleanPeriod)) : [],
       baselines: Array.isArray(raw.baselines) ? raw.baselines.map(cleanBaseline) : [],
     };
   } catch {
@@ -1543,23 +1545,19 @@ export function setClassValue(
 
   const next: EvmPeriod = { ...p, [field]: v, [srcKey]: 'manual' as Source };
 
-  // Recompute the parent total from its components. An absent sibling
-  // counts as 0 HERE ONLY - the parent is a sum, and a sum of one known
-  // and one unentered component is the known one.
+  // v3: components are PER-PERIOD — every parent total from this period on
+  // is a CUMULATIVE running sum, so one component edit cascades forward.
   if (field === 'directPv' || field === 'indirectPv') {
-    next.pv = num(next.directPv) + num(next.indirectPv);
     next.pvSource = 'manual';
   } else if (field === 'directEv') {
-    next.ev = num(next.directEv) + num(next.indirectEv);
     next.evSource = 'manual';
   } else {
-    next.ac = num(next.directAc) + num(next.indirectAc);
     next.acSource = 'manual';
   }
 
   const periods = store.periods.slice();
   periods[i] = next;
-  return { ...store, periods };
+  return { ...store, periods: deriveClassTotals(periods) };
 }
 
 /** True when this period carries any Step 12 component. */
@@ -1601,20 +1599,24 @@ export function applyIndirectEv(
   if (p.indirectEv === value && p.indirectEvBasis === pct) return store;
 
   const next: EvmPeriod = { ...p, indirectEv: value, indirectEvBasis: pct };
-  next.ev = num(next.directEv) + value;
+  // v3: indirect EV is a per-period figure — the parent cumulative EV is
+  // re-derived across the whole calendar, not patched in place.
   const periods = store.periods.slice();
   periods[i] = next;
-  return { ...store, periods };
+  return { ...store, periods: deriveClassTotals(periods) };
 }
 
 /**
  * Class-level metrics. Rule 12: TOTAL METRICS COME FROM TOTAL AGGREGATES.
  *
+ * v3: every class figure here is CUMULATIVE — the running sum of that
+ * class's per-period components from project start through the reporting
+ * period, matching the cumulative parent totals. (The old version read a
+ * single period's components, which understated both classes whenever
+ * more than one period had been entered.)
+ *
  * Total CPI is EV_total / AC_total — never the average of Direct CPI and
  * Indirect CPI, which would weight a tiny class equally with a huge one.
- * This function is called three times with three sets of aggregates; it
- * does not average anything.
- *
  * `metricsFor` is reused verbatim so the formulas stay identical across
  * all three levels. No EVM formula was rewritten.
  */
@@ -1629,11 +1631,16 @@ export interface ClassMetrics {
 }
 
 export function classMetrics(
-  p: EvmPeriod, bac: BacSplit, method: EacMethod = 'cpi',
+  periods: EvmPeriod[], upTo: EvmPeriod, bac: BacSplit, method: EacMethod = 'cpi',
 ): ClassMetrics {
-  const dPv = num(p.directPv), iPv = num(p.indirectPv);
-  const dEv = num(p.directEv), iEv = num(p.indirectEv);
-  const dAc = num(p.directAc), iAc = num(p.indirectAc);
+  const idx = periods.findIndex(p => p.id === upTo.id);
+  const hist = idx >= 0 ? periods.slice(0, idx + 1) : [upTo];
+  const sumOf = (k: 'directPv' | 'indirectPv' | 'directEv' | 'indirectEv' | 'directAc' | 'indirectAc') =>
+    hist.reduce((a, p) => a + num(p[k]), 0);
+
+  const dPv = sumOf('directPv'), iPv = sumOf('indirectPv');
+  const dEv = sumOf('directEv'), iEv = sumOf('indirectEv');
+  const dAc = sumOf('directAc'), iAc = sumOf('indirectAc');
 
   return {
     direct:   metricsFor(dPv, dEv, dAc, bac.directBac, method),
@@ -1641,7 +1648,7 @@ export function classMetrics(
     // Rule 12 — totals are sums, then metrics. Not averaged metrics.
     total:    metricsFor(dPv + iPv, dEv + iEv, dAc + iAc, bac.totalBac, method),
     bacAvailable: bac.available,
-    indirectBlocked: p.indirectEvBasis === null,
+    indirectBlocked: upTo.indirectEvBasis === null,
   };
 }
 
@@ -2404,7 +2411,7 @@ export function projectEvmResult(
   out.available = true;
   out.reason = '';
   out.periodLabel = period.label;
-  out.metrics = classMetrics(period, bac, store.settings.eacMethod);
+  out.metrics = classMetrics(store.periods, period, bac, store.settings.eacMethod);
   out.indirectBlocked = period.indirectEvBasis === null;
   out.split = hasSplit(period);
   return out;

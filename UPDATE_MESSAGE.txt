@@ -1,0 +1,1 @@
+EVM cost-class v3: Direct/Indirect entries are per-period values; totals are now true cumulative running sums across periods (Cost Class table + dashboard agree everywhere)
