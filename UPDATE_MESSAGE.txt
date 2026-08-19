@@ -1,1 +1,1 @@
-Totals (PV/EV/AC) are now fully automatic and read-only: derived exclusively from Direct/Indirect components; manual total entry cancelled everywhere; pasting an Excel cumulative column converts to monthly Direct PV increments
+Indirect EV fix: time is earned as it passes — the current period is measured at today (not its future end) and unstarted future periods earn zero, filling in when their month arrives; no more zeroed last periods

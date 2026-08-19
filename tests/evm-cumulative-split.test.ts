@@ -136,3 +136,26 @@ describe('applyIndirectEv — v3 fix: per-month increments, no double counting',
     expect(s.periods[1].ev).toBe(120_000); // 40K + 80K = 30% × 400K ✓
   });
 });
+
+
+describe('Indirect EV - time earned as it passes (future periods earn zero)', () => {
+  it("9: future period earns ZERO; the current period is measured at today, not its end", async () => {
+    const { applyIndirectEv } = await import('@/lib/evm');
+    const BAC_IND = 400_000;
+    // M1 خلص (basis 0.40) - M2 الحالية (النهاردة = 0.45) - M3 مستقبلية
+    let st: any = { settings: DEFAULT_SETTINGS, periods: [per(1), per(2), per(3)] };
+    st = applyIndirectEv(st, 'p1', 0.40, BAC_IND);
+    st = applyIndirectEv(st, 'p2', 0.45, BAC_IND);   // مقيسة بالنهاردة مش بنهايتها
+    st = applyIndirectEv(st, 'p3', 0, BAC_IND);      // مستقبلية = صفر
+    expect(st.periods[0].indirectEv).toBeCloseTo(160_000, 6);
+    expect(st.periods[1].indirectEv).toBeCloseTo(20_000, 6);   // 5% بس - اللي اكتسب فعلاً
+    expect(st.periods[2].indirectEv).toBe(0);
+    expect(st.periods[2].indirectEvBasis).toBe(0);
+    // الإجمالي التراكمي عند الفترة الحالية = 45% × 400K (مش منحنى كامل مبالغ)
+    const cum2 = st.periods.slice(0, 2).reduce((a: number, x: any) => a + (x.indirectEv ?? 0), 0);
+    expect(cum2).toBeCloseTo(180_000, 6);
+    // ولما M3 توصل شهرها فعلاً وتتعاد بأساس حقيقي - بتكتسب الفرق الطبيعي
+    st = applyIndirectEv(st, 'p3', 0.60, BAC_IND);
+    expect(st.periods[2].indirectEv).toBeCloseTo(60_000, 6);
+  });
+});

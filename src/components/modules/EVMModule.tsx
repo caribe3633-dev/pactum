@@ -264,17 +264,33 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
    */
   const recomputeIndirectEv = useCallback(() => {
     if (!bacSplit.available) return;
+    const today = new Date().toISOString().slice(0, 10);
     let next = store;
     for (const p of store.periods) {
       if (p.status === 'approved' || p.frozen) continue;
+
+      /* TIME IS EARNED AS IT PASSES — never measured at a future date.
+         A future period measured at its own end used to clamp to 100%,
+         swallow the entire remaining curve and leave every later month
+         at zero. Now:
+           - a period that has not started earns 0 (basis 0 — it fills
+             in on a later recompute when its month actually arrives);
+           - the CURRENT period is measured at TODAY, not at its end;
+           - a past period is still measured at its own end. */
+      if (p.start > today) {
+        next = applyIndirectEv(next, p.id, 0, bacSplit.indirectBac);
+        continue;
+      }
+      const asOf = p.end > today ? today : p.end;
+
       const eff = effectiveScheduleDuration(
         project.id,
         project.commencementDate || '',
         Number(project.plannedDurationDays) || 0,
-        p.end,
+        asOf,
       );
       const pct = timePlannedPercent(
-        project.commencementDate || '', eff, p.end,
+        project.commencementDate || '', eff, asOf,
       );
       next = applyIndirectEv(next, p.id, pct, bacSplit.indirectBac);
     }
