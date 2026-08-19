@@ -1,1 +1,1 @@
-Bridge fix: activating or rebaselining an EVM baseline now files an approved EVM Planned source version automatically; badge shows both numbers (BL V3 active + EV Planned V1 approved)
+Unified EV numbering: approving/activating EVM Baseline V3 now files source version V3 — one number everywhere (badge, Baseline card, package). Badge simplified to: Feb 2024 · EV V3 approved. Opens of the EV tab self-converge legacy data.

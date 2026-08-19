@@ -11,6 +11,7 @@ import ReportButton from '../reporting/ReportButton';
 import { computeApprovedEOT } from '../../lib/delayCalculations';
 import {
   approvedOf, openOf, readSourceVersions, syncEvmPlannedApproval,
+  fileEvmPlannedFromBaseline,
 } from '../../lib/sourceVersions';
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -171,6 +172,21 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
       open: openOf(sv, 'evm-planned'),
     };
   }, [project.id, store]);
+
+  /** ONE approval, ONE number: files the EVM Planned source version with the
+      ACTIVE EVM BASELINE's version number (V3 baseline = source V3). */
+  const activeBaseline = useMemo(
+    () => (store.baselines ?? []).find(b => b.id === store.settings.activeBaselineId) ?? null,
+    [store],
+  );
+  const fileFromActiveBaseline = (versionOverride?: number) => {
+    const v = versionOverride ?? activeBaseline?.version ?? 0;
+    if (v > 0) {
+      fileEvmPlannedFromBaseline(project.id, { userId: user?.username ?? 'unknown' }, v);
+    } else {
+      syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
+    }
+  };
   const [tab, setTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
   const [rbOpen, setRbOpen] = useState(false);
@@ -181,7 +197,18 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   const [pasteText, setPasteText] = useState('');
 
   // Re-read whenever the project changes; the calendar follows its dates.
-  useEffect(() => { setStore(readSyncedEvm(project)); }, [project.id]);
+  useEffect(() => {
+    const st = readSyncedEvm(project);
+    setStore(st);
+    // SELF-CONVERGE: legacy projects (approved baselines but no matching
+    // source versions) are filed once on open, so the numbers unify without
+    // waiting for the next approval act.
+    const bl = (st.baselines ?? []).find(b => b.id === st.settings.activeBaselineId);
+    if (bl?.approved) {
+      fileEvmPlannedFromBaseline(project.id, { userId: user?.username ?? 'unknown' }, bl.version);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
 
   const persist = useCallback((next: EvmStore) => {
     setStore(next);
@@ -305,7 +332,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
       // BRIDGE: signing off a period also files an approved EVM Planned
       // source version, so the Baseline cards and lag alerts move at once.
       if (to === 'approved') {
-        syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
+        fileFromActiveBaseline();
       }
     }
   };
@@ -322,8 +349,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     // New baseline -> extend the calendar and redistribute FUTURE PV only.
     const grown = generateFuturePeriods(project, res.store).store;
     persist(redistributePv(project, grown));
-    // BRIDGE: a rebaseline is an approval act — file the source version too.
-    syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
+    // BRIDGE (unified numbering): the new baseline version IS the source version.
+    const bv = (res.store.baselines ?? []).reduce((mx: number, b: any) => Math.max(mx, Number(b.version) || 0), 0);
+    fileFromActiveBaseline(bv || undefined);
     setRb({ reason: '', cause: 'approved-eot', daysAdded: '', valueAdded: '' });
     setRbOpen(false);
   };
@@ -387,9 +415,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     const next = { ...store, settings: { ...store.settings, activeBaselineId: id } };
     // Switching recalculates FUTURE forecasts only; frozen history is inert.
     persist(redistributePv(project, next));
-    // BRIDGE: activating an EVM baseline files an approved EVM Planned
-    // source version so the Baseline system reads this act immediately.
-    syncEvmPlannedApproval(project.id, { userId: user?.username ?? 'unknown' });
+    // BRIDGE (unified numbering): activating BL V3 files source version V3.
+    const bv = (store.baselines ?? []).find(b => b.id === id)?.version ?? 0;
+    fileFromActiveBaseline(bv || undefined);
   };
 
   // ── Report context: exactly what the screen shows ──
@@ -707,20 +735,15 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             const inFlight = newerInFlight
               ? ` · ${isRtl ? `V${oV} ${oSt === 'submitted' ? 'مُقدَّمة' : 'مسودة'}` : `V${oV} ${oSt === 'submitted' ? 'submitted' : 'draft'}`}`
               : '';
-            const activeBL = (store.baselines ?? []).find(b => b.id === store.settings.activeBaselineId);
-            const blV = activeBL ? String(activeBL.name ?? '').replace(/[^0-9]/g, '') || '' : '';
-            const blPart = activeBL
-              ? `${isRtl ? 'أساس' : 'BL'} ${blV ? `V${blV}` : ''} ${isRtl ? 'نشط' : 'active'} · `
-              : '';
-            if (evmSrc.approved) {
+            const blV = activeBaseline?.version ?? aV;
+            if (evmSrc.approved || (activeBaseline?.approved && blV)) {
               return (
                 <span className="badge badge-ok" title={isRtl
-                  ? 'أساس الـ EVM النشط + نسخة القيمة المكتسبة المخططة المعتمدة اللي بتقراها خطوط الأساس'
-                  : 'active EVM baseline + the approved EVM Planned source version the Baseline reads'}>
+                  ? 'اعتماد الـ EV الموحد — نفس رقم أساس الـ EVM اللي بتقراها خطوط الأساس'
+                  : 'the unified EV approval — same number as the EVM baseline the Baseline reads'}>
                   {period?.label}
                   {' · '}
-                  {blPart}
-                  {isRtl ? `EV Planned V${aV} معتمدة ✓` : `EV Planned V${aV} approved ✓`}
+                  {isRtl ? `EV V${blV} معتمدة ✓` : `EV V${blV} approved ✓`}
                   {inFlight}
                 </span>
               );

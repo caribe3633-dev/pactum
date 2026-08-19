@@ -111,3 +111,36 @@ describe('syncEvmPlannedApproval — the bridge', () => {
     expect(readSourceVersions('lag-empty').versions).toHaveLength(0);
   });
 });
+
+describe('fileEvmPlannedFromBaseline — الترقيم الموحد', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('7️⃣ تفعيل BL V3 يسجل نسخة مصدر معتمدة برقم V3 نفسه', async () => {
+    const { fileEvmPlannedFromBaseline, approvedOf, readSourceVersions } = await import('@/lib/sourceVersions');
+    localStorage.setItem('pactum-evm-unify-1', JSON.stringify({ settings: {}, periods: [{ id: 'x' }], baselines: [{ id: 'b3', version: 3 }] }));
+    const ok = fileEvmPlannedFromBaseline('unify-1', { userId: 'tester' }, 3);
+    expect(ok).toBe(true);
+    const approved = approvedOf(readSourceVersions('unify-1'), 'evm-planned');
+    expect(approved?.version).toBe(3);
+    expect(approved?.status).toBe('approved');
+  });
+
+  it('8️⃣ نفس النسخة بنفس البصمة = من غير تكرار (idempotent)', async () => {
+    const { fileEvmPlannedFromBaseline, readSourceVersions } = await import('@/lib/sourceVersions');
+    localStorage.setItem('pactum-evm-unify-2', JSON.stringify({ settings: {}, periods: [{ id: 'x' }] }));
+    fileEvmPlannedFromBaseline('unify-2', { userId: 't' }, 3);
+    fileEvmPlannedFromBaseline('unify-2', { userId: 't' }, 3);
+    const vs = readSourceVersions('unify-2').versions.filter(v => v.kind === 'evm-planned');
+    expect(vs.filter(v => v.version === 3)).toHaveLength(1);
+  });
+
+  it('9️⃣ التفعيل بيتفوق على أي مسودة/مقدمة مفتوحة', async () => {
+    const { fileEvmPlannedFromBaseline, readSourceVersions, createVersion } = await import('@/lib/sourceVersions');
+    localStorage.setItem('pactum-evm-unify-3', JSON.stringify({ settings: {}, periods: [{ id: 'x' }] }));
+    createVersion({ projectId: 'unify-3', kind: 'evm-planned', actor: { userId: 't' } });
+    fileEvmPlannedFromBaseline('unify-3', { userId: 't' }, 2);
+    const vs = readSourceVersions('unify-3').versions.filter(v => v.kind === 'evm-planned');
+    expect(vs.some(v => v.status === 'draft')).toBe(false);
+    expect(vs.find(v => v.version === 2)?.status).toBe('approved');
+  });
+});

@@ -555,6 +555,59 @@ function readContractLive(projectId: string): unknown {
  * captured from the live EVM store first. Returns false silently when the
  * live store is empty (nothing to version).
  */
+/**
+ * UNIFIED FILING — the EVM baseline IS the EVM Planned source version.
+ *
+ * One approval act, one number: approving/activating EVM Baseline V3 files
+ * an APPROVED 'evm-planned' source version numbered V3 — the same number
+ * the badge shows, the Baseline card reads, and the package records. The
+ * old separate numbering (EV Planned V1 beside BL V3) is retired.
+ *
+ * - Any open draft/submitted evm-planned version is superseded (dropped):
+ *   the baseline act outranks in-flight manual captures.
+ * - Filing the same version with unchanged data is a no-op (idempotent).
+ */
+export function fileEvmPlannedFromBaseline(
+  projectId: string, actor: Actor, baselineVersion: number,
+): boolean {
+  if (!projectId || !baselineVersion || baselineVersion < 1) return false;
+  const live = readLiveSource(projectId, 'evm-planned');
+  if (live === null || live === undefined) return false;
+
+  const store = readSourceVersions(projectId);
+  const kept = store.versions.filter(v =>
+    !(v.kind === 'evm-planned' && (v.status === 'draft' || v.status === 'submitted')));
+  const digest = digestOf(live);
+  const already = kept.some(v =>
+    v.kind === 'evm-planned' && v.status === 'approved'
+    && v.version === baselineVersion && v.digest === digest);
+  if (already) return true;
+
+  const now = new Date().toISOString();
+  const who = actor.userId || 'unknown';
+  const v: SourceVersion = {
+    id: `sv-evm-planned-v${baselineVersion}-${Date.now()}`,
+    projectId,
+    kind: 'evm-planned',
+    version: baselineVersion,
+    revision: 0,
+    status: 'approved',
+    snapshot: live,
+    digest,
+    rowCount: rowsOf(live),
+    emptyByDeclaration: false,
+    createdAt: now,
+    createdBy: who,
+    submittedAt: now,
+    submittedBy: who,
+    submissionCount: 1,
+    approvedAt: now,
+    approvedBy: who,
+  } as SourceVersion;
+  writeSourceVersions(projectId, { versions: [...kept, v] });
+  return true;
+}
+
 export function syncEvmPlannedApproval(projectId: string, actor: Actor): boolean {
   if (!projectId) return false;
   const store = readSourceVersions(projectId);
