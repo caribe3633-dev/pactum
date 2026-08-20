@@ -115,6 +115,15 @@ export interface EvmPeriod {
   /** Time-based planned % used to derive indirectEv. null = unknowable. */
   indirectEvBasis?: number | null;
 
+  /**
+   * SEPARATE CLASS APPROVALS (owner rule). Direct and Indirect are
+   * approved INDEPENDENTLY; the period's total `status` is approved
+   * ONLY when both are. Undefined = this period never used class
+   * approvals — the plain period workflow applies.
+   */
+  directStatus?: 'draft' | 'approved';
+  indirectStatus?: 'draft' | 'approved';
+
   status: PeriodStatus;
   reviewer: string;
   /** ISO yyyy-mm-dd. */
@@ -327,6 +336,8 @@ function cleanPeriod(r: any, i: number): EvmPeriod {
     indirectEvBasis:  r?.indirectEvBasis === undefined || r?.indirectEvBasis === null
       ? (r?.indirectEvBasis === null ? null : undefined)
       : num(r.indirectEvBasis),
+    directStatus:   r?.directStatus === 'approved' ? 'approved' : r?.directStatus === 'draft' ? 'draft' : undefined,
+    indirectStatus: r?.indirectStatus === 'approved' ? 'approved' : r?.indirectStatus === 'draft' ? 'draft' : undefined,
     status: st,
     reviewer: String(r?.reviewer ?? ''),
     reviewDate: String(r?.reviewDate ?? ''),
@@ -849,7 +860,7 @@ export function syncCalendar(project: ProjectLike, store: EvmStore): {
   const span = Math.max(1, daysBetween(start, end));
 
   let created = 0;
-  const periods: EvmPeriod[] = spec.map(s => {
+  const gridPeriods: EvmPeriod[] = spec.map(s => {
     const prior = byStart.get(s.start);
     // Cumulative planned value at this period end.
     const endD = parseIso(s.end)!;
@@ -873,6 +884,23 @@ export function syncCalendar(project: ProjectLike, store: EvmStore): {
       status: 'draft', reviewer: '', reviewDate: '', comment: '', updatedAt: '',
     };
   });
+
+  /**
+   * ════════════════════════════════════════════════════════════════════
+   * NO PERIOD IS EVER DELETED (owner rule).
+   *
+   * This function used to return ONLY the new grid — so a cadence or
+   * schedule change dropped every stored period whose start fell off
+   * the new grid: entered draft data, approvals and frozen snapshots,
+   * all of it. A row that misses the grid is a FACT that happened, not
+   * a formatting error. It stays, exactly as stored, after the grid.
+   * ════════════════════════════════════════════════════════════════════
+   */
+  const onGrid = new Set(spec.map(s => s.start));
+  const orphans = store.periods.filter(p => !onGrid.has(p.start));
+  const periods = [...gridPeriods, ...orphans].sort((a, b) =>
+    a.start < b.start ? -1 : a.start > b.start ? 1 : a.seq - b.seq,
+  );
 
   return { store: { ...store, periods }, created };
 }
@@ -1499,6 +1527,20 @@ export function transition(
     delete next.baselineId;
   }
 
+  /**
+   * CLASS COHERENCE: a whole-period approval approves both classes; a
+   * resubmit back to draft reopens both. The statuses can never tell a
+   * different story from the period they belong to.
+   */
+  if (to === 'approved') {
+    next.directStatus = 'approved';
+    next.indirectStatus = 'approved';
+  }
+  if (to === 'draft' && p.status === 'approved') {
+    next.directStatus = 'draft';
+    next.indirectStatus = 'draft';
+  }
+
   if (to === 'approved') {
     // Cumulative indices across all history to this period — the correct
     // basis for a forecast, and what gets frozen.
@@ -1529,6 +1571,103 @@ export function transition(
 
   periods[i] = next;
   return { store: { ...store, periods }, ok: true };
+}
+
+// ── Separate class approvals ───────────────────────────────────────────
+
+export type CostClass = 'direct' | 'indirect';
+
+/** True when THIS class of the period is approved on its own. */
+export function classApproved(p: EvmPeriod, cls: CostClass): boolean {
+  return (cls === 'direct' ? p.directStatus : p.indirectStatus) === 'approved';
+}
+
+/**
+ * APPROVE ONE CLASS — Direct and Indirect sign off independently.
+ *
+ * The TOTAL stays draft until BOTH are approved (owner rule): only then
+ * does the period freeze, become the reporting record, and count for
+ * SPI/CPI. Values are never touched — approving is a decision, not an
+ * edit; the numbers were already stored.
+ */
+export function approveClass(
+  store: EvmStore, periodId: string, cls: CostClass, reviewer: string, bac?: number,
+): { store: EvmStore; ok: boolean; reason?: string } {
+  const i = store.periods.findIndex(p => p.id === periodId);
+  if (i < 0) return { store, ok: false, reason: 'not-found' };
+  const p = store.periods[i];
+  if (classApproved(p, cls)) return { store, ok: true };
+
+  const key = cls === 'direct' ? 'directStatus' : 'indirectStatus';
+  const stamped: EvmPeriod = {
+    ...p,
+    [key]: 'approved',
+    reviewer: reviewer || p.reviewer,
+    reviewDate: new Date().toISOString().slice(0, 10),
+    updatedAt: new Date().toISOString(),
+  };
+  const periods = store.periods.slice();
+  periods[i] = stamped;
+  let out: EvmStore = { ...store, periods };
+
+  // TOTAL = both classes. Approving the second one completes the period:
+  // freeze it exactly as a whole-period approval would.
+  if (stamped.directStatus === 'approved' && stamped.indirectStatus === 'approved'
+      && stamped.status !== 'approved') {
+    const r = transition(out, periodId, 'approved', reviewer, undefined, bac);
+    if (r.ok) out = r.store;
+  }
+  return { store: out, ok: true };
+}
+
+/**
+ * REOPEN ONE CLASS. If that breaks the both-approved pair, the period
+ * thaws back to draft — but its VALUES are kept exactly as stored:
+ * reopening is a workflow act, and wiping entered data with it would
+ * punish the user for correcting a signature (owner rule: nothing is
+ * erased except by an explicit edit).
+ */
+export function reopenClass(
+  store: EvmStore, periodId: string, cls: CostClass, reviewer: string,
+): { store: EvmStore; ok: boolean; reason?: string } {
+  const i = store.periods.findIndex(p => p.id === periodId);
+  if (i < 0) return { store, ok: false, reason: 'not-found' };
+  const p = store.periods[i];
+  if (!classApproved(p, cls)) return { store, ok: true };
+
+  const key = cls === 'direct' ? 'directStatus' : 'indirectStatus';
+  const stamped: EvmPeriod = {
+    ...p,
+    [key]: 'draft',
+    reviewer: reviewer || p.reviewer,
+    reviewDate: new Date().toISOString().slice(0, 10),
+    updatedAt: new Date().toISOString(),
+  };
+  const periods = store.periods.slice();
+  periods[i] = stamped;
+  let out: EvmStore = { ...store, periods };
+
+  const both = stamped.directStatus === 'approved' && stamped.indirectStatus === 'approved';
+  if (!both && stamped.status === 'approved') {
+    const r = transition(out, periodId, 'draft', reviewer);
+    if (r.ok) {
+      out = r.store;
+      /**
+       * transition's whole-period coherence reopens BOTH classes — a
+       * class reopen must leave the OTHER signature standing. Restore
+       * it: the surviving class was approved before the pair broke
+       * (an approved period always had both), and this reopen only
+       * demotes its own class.
+       */
+      const survivor = (cls === 'direct' ? 'indirectStatus' : 'directStatus') as
+        'indirectStatus' | 'directStatus';
+      out = {
+        ...out,
+        periods: out.periods.map((x, j) => (j === i ? { ...x, [survivor]: 'approved' } : x)),
+      };
+    }
+  }
+  return { store: out, ok: true };
 }
 
 /**
@@ -1649,7 +1788,12 @@ export function setClassValue(
   const i = store.periods.findIndex(p => p.id === periodId);
   if (i < 0) return store;
   const p = store.periods[i];
-  if (isLocked(p) || p.frozen) return store;
+  // LOCKS ARE PER CLASS (owner rule): an approved Direct does not freeze
+  // Indirect and vice versa — only the whole period (both approved) does.
+  const clsLocked = field.startsWith('direct')
+    ? p.directStatus === 'approved'
+    : p.indirectStatus === 'approved';
+  if (clsLocked || isLocked(p) || p.frozen) return store;
 
   if (value === null || value === undefined
       || (typeof value === 'string' && String(value).trim() === '')) return store;
@@ -1747,7 +1891,9 @@ export function applyIndirectEv(
   const i = store.periods.findIndex(p => p.id === periodId);
   if (i < 0) return store;
   const p = store.periods[i];
-  if (isLocked(p) || p.frozen) return store;
+  // A separately-approved INDIRECT is signed on its own (owner rule):
+  // the recompute may not rewrite it even while the Direct side is live.
+  if (isLocked(p) || p.frozen || p.indirectStatus === 'approved') return store;
   if (pct === null || !Number.isFinite(pct)) {
     // Record that it could not be determined. No value is written.
     if (p.indirectEvBasis === null) return store;

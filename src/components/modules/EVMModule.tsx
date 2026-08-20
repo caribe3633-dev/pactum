@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import {
   readSyncedEvm, writeEvm, snapshot, metricsFor, setValue, clearOverride,
-  transition, canTransition, isLocked, syncCalendar, refreshCurrent,
+  transition, canTransition, isLocked, syncCalendar, refreshCurrent, approveClass, reopenClass, classApproved,
   STATUS_META, NEXT_STATUS, ACTIVE_STATUSES, currentPeriodIndex,
   EvmStore, EvmPeriod, PeriodStatus, Cadence, EvmSnapshot,
   // ── Refinement additions ──
@@ -304,7 +304,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     if (!bacSplit.available) return;
     let next = store;
     for (const p of store.periods) {
-      if (p.status === 'approved' || p.frozen) continue;
+      // Signed rows are never rewritten: the whole period, or the
+      // indirect class on its own (separate approvals).
+      if (p.status === 'approved' || p.frozen || p.indirectStatus === 'approved') continue;
 
       /* OWNER'S RULE: indirectEv = indirectBac \u00d7 \u0646\u0633\u0628\u0629 \u0627\u0644\u0634\u0647\u0631 \u0627\u0644\u0646\u0641\u0633\u0647.
          The month's own share = the period's days \u00f7 the effective approved
@@ -383,6 +385,25 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
         fileFromActiveBaseline();
       }
     }
+  };
+
+  // ── SEPARATE CLASS APPROVALS (owner rule) ──
+  // Direct and Indirect sign off independently; the total freezes only
+  // when both have. Reopening one class thaws the total but KEEPS every
+  // stored value — a signature is corrected, the data is not erased.
+  const approveCls = (p: EvmPeriod, cls: 'direct' | 'indirect') => {
+    const res = approveClass(store, p.id, cls, user?.username ?? 'unknown', bac);
+    if (res.ok) {
+      persist(res.store);
+      // Completing the pair is a full approval — file the source version.
+      if (res.store.periods.find(x => x.id === p.id)?.status === 'approved') {
+        fileFromActiveBaseline();
+      }
+    }
+  };
+  const reopenCls = (p: EvmPeriod, cls: 'direct' | 'indirect') => {
+    const res = reopenClass(store, p.id, cls, user?.username ?? 'unknown');
+    if (res.ok) persist(res.store);
   };
 
   const doRebaseline = () => {
@@ -1550,7 +1571,51 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                         ══════════════════════════════════════════════════
                       */}
                       <td>
-                        {canEdit && NEXT_STATUS[p.status].length > 0 ? (
+                        {hasSplit(p) ? (
+                          /* SEPARATE CLASS APPROVALS (owner rule): Direct and
+                             Indirect sign off independently; the total is
+                             approved ONLY when both are. */
+                          <span className="flex flex-col gap-1 items-start">
+                            <span className={cn('badge',
+                              p.status === 'approved' ? STATUS_META.approved.tone : 'badge-gold')}>
+                              {p.status === 'approved'
+                                ? (isRtl ? 'معتمد ✓' : 'Approved ✓')
+                                : classApproved(p, 'direct') || classApproved(p, 'indirect')
+                                  ? (isRtl ? 'جزئي — بانتظار الفئة الأخرى' : 'Partial — awaiting the other class')
+                                  : (isRtl ? 'مسودة' : 'Draft')}
+                            </span>
+                            {(['direct', 'indirect'] as const).map(cls => {
+                              const ok = classApproved(p, cls);
+                              return (
+                                <span key={cls} className="flex items-center gap-1.5">
+                                  <span className={cn('badge', ok ? 'badge-ok' : 'badge-neutral')}>
+                                    {cls === 'direct'
+                                      ? (isRtl ? 'دايركت' : 'Direct')
+                                      : (isRtl ? 'اندايركت' : 'Indirect')}
+                                    {ok ? ' ✓' : ''}
+                                  </span>
+                                  {canEdit && (
+                                    ok ? (
+                                      <button onClick={() => reopenCls(p, cls)}
+                                            title={isRtl ? 'إعادة فتح الفئة — البيانات لا تُمسح' : 'Reopen this class — data is kept'}
+                                            className="text-(length:--t-micro) text-muted-foreground hover:text-primary underline cursor-pointer">
+                                        {isRtl ? 'إعادة فتح' : 'Reopen'}
+                                      </button>
+                                    ) : (
+                                      <button onClick={() => approveCls(p, cls)}
+                                              title={isRtl
+                                                ? 'اعتماد هذه الفئة — الإجمالي يُعتمد عند اكتمال الاثنتين'
+                                                : 'Approve this class — the total approves when both are complete'}
+                                              className="text-(length:--t-micro) text-primary hover:text-white underline cursor-pointer">
+                                        {isRtl ? 'اعتمد' : 'Approve'}
+                                      </button>
+                                    )
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        ) : canEdit && NEXT_STATUS[p.status].length > 0 ? (
                           <select
                             value={p.status}
                             aria-label={isRtl ? 'حالة الفترة' : 'Period status'}
