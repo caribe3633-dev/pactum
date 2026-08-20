@@ -4,7 +4,7 @@ import { useTranslation } from '../../lib/i18n';
 import { formatMoney } from '../../lib/utils';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Area,
+  Tooltip, Legend, ResponsiveContainer, Brush,
 } from 'recharts';
 import { Plus, Trash2, RefreshCw, ArrowRightLeft, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, CalendarRange, TrendingUp } from 'lucide-react';
 // The platform's single date renderer — `30 June 2025` everywhere.
@@ -124,6 +124,19 @@ const CASH_TABS: { id: CashTab; icon: any; en: string; ar: string }[] = [
   { id: 'periods',    icon: CalendarRange, en: 'Periods',    ar: 'الفترات' },
   { id: 'cumulative', icon: TrendingUp,    en: 'Cumulative', ar: 'التراكمي' },
 ];
+
+// ACTUAL cash colours, tuned for the dark card background. The old
+// #2f6b45 / #a02c26 were DARKER than the plan colours beside them and
+// close to the background itself — the lines were drawn (verified by an
+// off-screen render) and still invisible. Bright beats muted for the
+// actuals; the PLAN keeps the pale, dashed, half-opacity treatment so
+// what happened reads before what was intended.
+const CASH_IN  = '#52c98b';
+const CASH_OUT = '#ff7a6e';
+
+/** Above this many periods the dots come off and the Brush does the
+ *  focusing — a 5-year monthly project draws 60 dots per series. */
+const DOT_LIMIT = 24;
 
 export default function CashFlowModule({ project, canEdit = true }: { project: Project; canEdit?: boolean }) {
   const { t, lang } = useTranslation();
@@ -289,6 +302,9 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
   /** The cumulative table's rows — derived from the same chrono rows,
    *  read-only, never stored. Same order: oldest → newest. */
   const cumRows = useMemo(() => cashCumulativeTable(chronoRows), [chronoRows]);
+
+  /** Long horizons lose the dots and gain the zoom brush. */
+  const manyPeriods = chronoRows.length > DOT_LIMIT;
 
   /** Newest → oldest, for the table only. */
   const display = useMemo(() => chrono.slice().reverse(), [chrono]);
@@ -788,7 +804,8 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
         <ResponsiveContainer width="100%" height="86%">
           <ComposedChart data={series} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(212,175,55,0.08)" vertical={false} />
-            <XAxis dataKey="month" stroke="#a5a49f" tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+            <XAxis dataKey="month" stroke="#a5a49f" interval="preserveStartEnd"
+                   tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
             <YAxis stroke="#a5a49f" tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
                    tickFormatter={v => kpiMoney(v, money.base)} />
             <Tooltip {...tooltipStyle} formatter={(v: number) => formatMoney(v, { currency: money.base })} />
@@ -797,25 +814,34 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
             {hasAnyPlan && (
               <Line type="monotone" dataKey="plannedIn"
                     name={lang === 'ar' ? 'وارد مخطط' : 'Planned In'}
-                    stroke="#7fcf95" strokeWidth={2} strokeDasharray="6 4"
-                    dot={{ r: 2.5, fill: '#7fcf95', strokeWidth: 0 }}
+                    stroke="#7fcf95" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.55}
+                    dot={false}
                     connectNulls={false} />
             )}
             <Line type="monotone" dataKey="in" name={t.cashIn}
-                  stroke="#2f6b45" strokeWidth={2.5}
-                  dot={{ r: 3, fill: '#2f6b45', strokeWidth: 0 }} />
+                  stroke={CASH_IN} strokeWidth={2.5}
+                  dot={manyPeriods ? false : { r: 3, fill: CASH_IN, strokeWidth: 0 }} />
             {hasAnyPlan && (
               <Line type="monotone" dataKey="plannedOut"
                     name={lang === 'ar' ? 'صادر مخطط' : 'Planned Out'}
-                    stroke="#e8736d" strokeWidth={2} strokeDasharray="6 4"
-                    dot={{ r: 2.5, fill: '#e8736d', strokeWidth: 0 }}
+                    stroke="#e8736d" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.55}
+                    dot={false}
                     connectNulls={false} />
             )}
             <Line type="monotone" dataKey="out" name={t.cashOut}
-                  stroke="#a02c26" strokeWidth={2.5}
-                  dot={{ r: 3, fill: '#a02c26', strokeWidth: 0 }} />
+                  stroke={CASH_OUT} strokeWidth={2.5}
+                  dot={manyPeriods ? false : { r: 3, fill: CASH_OUT, strokeWidth: 0 }} />
+            {/* Brush = zoom. On a 5-year monthly ledger this chart carries
+                60 points per series; the brush is how the reader focuses. */}
+            <Brush dataKey="month" height={22} stroke="rgba(212,175,55,0.4)"
+                   fill="rgba(0,0,0,0.3)" travellerWidth={8} />
           </ComposedChart>
         </ResponsiveContainer>
+        <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
+          {lang === 'ar'
+            ? 'اسحب المقبضين أسفل الرسم للتكبير على نافذة زمنية. الباهت المتقطع = الخطة، والفاتح المتصل = الفعلي.'
+            : 'Drag the handles below the chart to zoom a time window. Pale dashed = planned; bright solid = actual.'}
+        </p>
       </div>
 
       </>
@@ -834,45 +860,37 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
         <ResponsiveContainer width="100%" height="86%">
           <ComposedChart data={series} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(212,175,55,0.08)" vertical={false} />
-            <XAxis dataKey="month" stroke="#a5a49f" tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+            <XAxis dataKey="month" stroke="#a5a49f" interval="preserveStartEnd"
+                   tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
             <YAxis stroke="#a5a49f" tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
                    tickFormatter={v => kpiMoney(v, money.base)} />
             <Tooltip {...tooltipStyle} formatter={(v: number) => formatMoney(v, { currency: money.base })} />
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
 
-            {/* PLAN (pale + dashed) before ACTUAL (deep + solid), in before
-                out before net — the same reading order as the tables. All
-                six are cumulative, so they share one axis honestly. */}
+            {/* Four curves, nothing else: planned vs actual, in and out.
+                The NET and the VARIANCE are deliberately NOT drawn — four
+                lines is what the eye holds; their numbers live in the
+                Cumulative Position table right below this chart. */}
             {hasAnyPlan && (
               <Line type="monotone" dataKey="cumPlannedIn"
                     name={lang === 'ar' ? 'تراكمي وارد مخطط' : 'Cum. Planned In'}
-                    stroke="#7fcf95" strokeWidth={2} strokeDasharray="6 4"
+                    stroke="#7fcf95" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.55}
                     dot={false} connectNulls={false} />
             )}
             <Line type="monotone" dataKey="cumIn"
                   name={lang === 'ar' ? 'تراكمي وارد فعلي' : 'Cum. Cash In'}
-                  stroke="#2f6b45" strokeWidth={2.5} dot={false} />
+                  stroke={CASH_IN} strokeWidth={2.5} dot={false} />
             {hasAnyPlan && (
               <Line type="monotone" dataKey="cumPlannedOut"
                     name={lang === 'ar' ? 'تراكمي صادر مخطط' : 'Cum. Planned Out'}
-                    stroke="#e8736d" strokeWidth={2} strokeDasharray="6 4"
+                    stroke="#e8736d" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.55}
                     dot={false} connectNulls={false} />
             )}
             <Line type="monotone" dataKey="cumOut"
                   name={lang === 'ar' ? 'تراكمي صادر فعلي' : 'Cum. Cash Out'}
-                  stroke="#a02c26" strokeWidth={2.5} dot={false} />
-            {/* Net planned: the planned balance trajectory. */}
-            {hasAnyPlan && (
-              <Line type="monotone" dataKey="cumPlanned"
-                    name={lang === 'ar' ? 'الصافي المخطط التراكمي' : 'Cum. Planned Net'}
-                    stroke="#f0d060" strokeWidth={2} strokeDasharray="8 5"
-                    dot={false} connectNulls={false} />
-            )}
-            {/* Net actual: recomputed in date order, so the curve and the
-                cumulative table below can never tell two stories. */}
-            <Area type="monotone" dataKey="cumNet"
-                  name={lang === 'ar' ? 'الصافي الفعلي التراكمي' : 'Cum. Actual Net'}
-                  fill="#b8912a12" stroke="#b8912a" strokeWidth={2.5} dot={false} />
+                  stroke={CASH_OUT} strokeWidth={2.5} dot={false} />
+            <Brush dataKey="month" height={22} stroke="rgba(212,175,55,0.4)"
+                   fill="rgba(0,0,0,0.3)" travellerWidth={8} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

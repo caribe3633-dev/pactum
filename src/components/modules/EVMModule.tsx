@@ -243,6 +243,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     [...points.map(p => p.spi), prevM?.spi ?? null, m.spi, trendSpi],
     [...points.map(p => p.cpi), prevM?.cpi ?? null, m.cpi, trendCpi],
   );
+  /** Long horizons lose the dots and zoom with the brush — a 5-year
+   *  monthly programme draws 60 points per series. */
+  const manyPeriods = points.length > 24;
 
   /**
    * ══════════════════════════════════════════════════════════════════════
@@ -1806,7 +1809,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <ReferenceLine y={bac} stroke={C_EV} strokeDasharray="4 4"
                                label={{ value: 'BAC', fill: C_EV, fontSize: 10, position: 'insideTopRight' }} />
                 <Line type="monotone" dataKey="eac" name="EAC" stroke={C_AC} strokeWidth={2}
-                      dot={{ r: 2 }} connectNulls={false} />
+                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
+                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -1965,9 +1970,11 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <ReferenceLine y={1} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
                 <Line type="monotone" dataKey="spi" name="SPI" stroke={C_EV} strokeWidth={2}
-                      dot={{ r: 2 }} connectNulls={false} />
+                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
                 <Line type="monotone" dataKey="cpi" name="CPI" stroke={C_OK} strokeWidth={2}
-                      dot={{ r: 2 }} connectNulls={false} />
+                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
+                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -1982,8 +1989,12 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => formatMoney(Number(v), { currency: ccy })} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
-                <Line type="monotone" dataKey="sv" name="SV" stroke={C_WARN} strokeWidth={2} dot={{ r: 2 }} />
-                <Line type="monotone" dataKey="cv" name="CV" stroke={C_AC} strokeWidth={2} dot={{ r: 2 }} />
+                <Line type="monotone" dataKey="sv" name="SV" stroke={C_WARN} strokeWidth={2}
+                      dot={manyPeriods ? false : { r: 2 }} />
+                <Line type="monotone" dataKey="cv" name="CV" stroke={C_AC} strokeWidth={2}
+                      dot={manyPeriods ? false : { r: 2 }} />
+                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -2000,9 +2011,11 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
                 <Line type="monotone" dataKey="vac" name="VAC" stroke={C_WARN} strokeWidth={2}
-                      dot={{ r: 2 }} connectNulls={false} />
+                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
                 <Line type="monotone" dataKey="eac" name="EAC" stroke={C_AC} strokeWidth={1.5}
                       dot={false} connectNulls={false} />
+                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
