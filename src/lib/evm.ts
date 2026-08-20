@@ -31,7 +31,13 @@
 
 export type PeriodStatus = 'draft' | 'submitted' | 'reviewed' | 'approved' | 'rejected';
 
-export type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+/**
+ * Reporting cadence. Weekly and biweekly are GONE (owner decision): a
+ * weekly EVM report is a cash-flow statement wearing a costume, and no
+ * real progress review signs off 520 periods. Legacy stores holding
+ * 'weekly'/'biweekly' are normalized to 'monthly' on load.
+ */
+export type Cadence = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 
 /** Where a figure came from. Drives the AUTO / MANUAL badge. */
 export type Source = 'auto' | 'manual';
@@ -427,7 +433,7 @@ export function readEvm(projectId: string): EvmStore {
     const s = raw.settings || {};
     return {
       settings: {
-        cadence: ['weekly', 'biweekly', 'monthly', 'quarterly'].includes(s.cadence) ? s.cadence : 'monthly',
+        cadence: ['monthly', 'quarterly', 'semiannual', 'annual'].includes(s.cadence) ? s.cadence : 'monthly',
         bacOverride: num(s.bacOverride),
         eacMethod: ['cpi', 'atypical', 'composite'].includes(s.eacMethod) ? s.eacMethod : 'cpi',
         allowManual: s.allowManual !== false,
@@ -476,29 +482,24 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** ISO week number, used only for the weekly axis label. */
-function isoWeek(d: Date): number {
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  return Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-}
-
 function labelFor(start: Date, cadence: Cadence): string {
-  if (cadence === 'weekly' || cadence === 'biweekly') {
-    return `W${String(isoWeek(start)).padStart(2, '0')} ${start.getUTCFullYear()}`;
-  }
   if (cadence === 'quarterly') {
     return `Q${Math.floor(start.getUTCMonth() / 3) + 1} ${start.getUTCFullYear()}`;
+  }
+  if (cadence === 'semiannual') {
+    return `H${Math.floor(start.getUTCMonth() / 6) + 1} ${start.getUTCFullYear()}`;
+  }
+  if (cadence === 'annual') {
+    return String(start.getUTCFullYear());
   }
   return `${MONTHS[start.getUTCMonth()]} ${start.getUTCFullYear()}`;
 }
 
 export const CADENCE_META: { value: Cadence; en: string; ar: string }[] = [
-  { value: 'weekly',    en: 'Weekly',    ar: 'أسبوعي' },
-  { value: 'biweekly',  en: 'Biweekly',  ar: 'كل أسبوعين' },
-  { value: 'monthly',   en: 'Monthly',   ar: 'شهري' },
-  { value: 'quarterly', en: 'Quarterly', ar: 'ربع سنوي' },
+  { value: 'monthly',    en: 'Monthly',    ar: 'شهري' },
+  { value: 'quarterly',  en: 'Quarterly',  ar: 'ربع سنوي' },
+  { value: 'semiannual', en: 'Semi-Annual', ar: 'نصف سنوي' },
+  { value: 'annual',     en: 'Annual',     ar: 'سنوي' },
 ];
 
 // ── Automatic inputs, read from stores other modules own ───────────────
@@ -782,12 +783,12 @@ export function buildCalendar(project: ProjectLike, cadence: Cadence): {
   // from locking the browser in a loop.
   while (cursor.getTime() < end.getTime() && seq <= 520) {
     let next: Date;
-    if (cadence === 'weekly') {
-      next = addDays(cursor, 7);
-    } else if (cadence === 'biweekly') {
-      next = addDays(cursor, 14);
-    } else if (cadence === 'quarterly') {
+    if (cadence === 'quarterly') {
       next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 3, 1));
+    } else if (cadence === 'semiannual') {
+      next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 6, 1));
+    } else if (cadence === 'annual') {
+      next = new Date(Date.UTC(cursor.getUTCFullYear() + 1, cursor.getUTCMonth(), 1));
     } else {
       next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
     }
@@ -2020,9 +2021,9 @@ export function generateFuturePeriods(
 
   while (cursor.getTime() < target.getTime() && created < 520) {
     let next: Date;
-    if (cadence === 'weekly')          next = addDays(cursor, 7);
-    else if (cadence === 'biweekly')   next = addDays(cursor, 14);
-    else if (cadence === 'quarterly')  next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 3, 1));
+    if (cadence === 'quarterly')       next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 3, 1));
+    else if (cadence === 'semiannual') next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 6, 1));
+    else if (cadence === 'annual')     next = new Date(Date.UTC(cursor.getUTCFullYear() + 1, cursor.getUTCMonth(), 1));
     else                               next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
     if (next.getTime() > target.getTime()) next = new Date(target.getTime());
 

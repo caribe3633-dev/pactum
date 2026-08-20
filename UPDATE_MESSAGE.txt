@@ -1,1 +1,1 @@
-BAC Override and PV Distribution removed from EVM settings (BAC is always the signed package / derived contract total; PV is the S-curve assumption until a programme is pasted). Settings now staged: a Save Settings button commits Cadence + EAC method; Cancel discards. Old stored values are parsed but ignored — no data breaks
+Cadence is now monthly, quarterly, semi-annual or annual only — weekly/biweekly removed entirely. Semi-annual periods label H1/H2, annual labels the year. Projects stored on a weekly cadence open as monthly, existing periods untouched
