@@ -1,1 +1,1 @@
-Charts readable at any horizon: actual cash lines recoloured bright (the invisible dark green 'cash in' fixed — verified drawn, now visible), cumulative chart = 4 curves only (net/variance in the table), zoom brush on all long charts, dots auto-off past 24 periods, tick anchoring
+EVM Health (project header card + EVM dashboard tile) now shows the Matrix Current Position state — e.g. 'Ahead of Schedule - Under Budget' with its tone, plus the ON TARGET ±5% chip when applicable. The old Healthy/Watch/Critical verdict moved into the tooltip / sub-line

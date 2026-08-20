@@ -34,7 +34,7 @@ import LoadSampleData from '../components/LoadSampleData';
 import { packageLag } from '../lib/baselines';
 import { timelineNeedsAttention } from '../lib/timeline';
 import { contractPhaseOption, isContractPhaseException } from '../lib/contractPhases';
-import { snapshot as evmSnapshot, readSyncedEvm } from '../lib/evm';
+import { snapshot as evmSnapshot, readSyncedEvm, withinTolerance } from '../lib/evm';
 
 const TABS = [
   { id: 'overview',  icon: ClipboardList, en: 'Overview',           ar: 'نظرة عامة' },
@@ -80,14 +80,20 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
   );
 
   /* Header cards — the contract phase the user selects in the Contract tab,
-     and the EVM health verdict from the same engine the EVM tab runs. */
+     and the EVM position from the same engine the Matrix reports: the
+     quadrant state (ahead/behind × under/over budget), not a verdict. */
   const contractPhase = project ? contractPhaseOption(project.contractPhase) : null;
-  const evmHealth = useMemo(() => {
-    if (!project) return null;
+  const evmPosition = useMemo(() => {
+    if (!project) return { quadrant: null, health: null, onTarget: false };
     try {
-      return evmSnapshot(project as any, readSyncedEvm(project as any)).health ?? null;
+      const snap = evmSnapshot(project as any, readSyncedEvm(project as any));
+      return {
+        quadrant: snap.quadrant ?? null,
+        health: snap.health ?? null,
+        onTarget: withinTolerance(snap.m.spi, snap.m.cpi),
+      };
     } catch {
-      return null;
+      return { quadrant: null, health: null, onTarget: false };
     }
   }, [project, activeTab]);
 
@@ -260,22 +266,33 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
                 </>
               )}
             </div>
-            {/* EVM HEALTH — the verdict of the same engine the EVM tab runs. */}
+            {/* EVM POSITION — the Matrix's Current Position state, same
+                engine, same words: ahead/behind × under/over budget. The
+                old Healthy/Watch/Critical verdict rides along as the
+                first-reason sub-line, so nothing is lost. */}
             <div className="kpi">
               <div className="kpi-k">{lang === 'ar' ? 'صحة القيمة المكتسبة' : 'EVM Health'}</div>
-              <div className="mt-0.5">
+              <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                 <span className={cn('badge',
-                  !evmHealth ? 'badge-neutral'
-                  : evmHealth.tone === 'ok' ? 'badge-ok'
-                  : evmHealth.tone === 'gold' ? 'badge-gold'
-                  : evmHealth.tone === 'warn' ? 'badge-warn'
-                  : evmHealth.tone === 'risk' ? 'badge-risk' : 'badge-neutral')}>
-                  {evmHealth ? (lang === 'ar' ? evmHealth.ar : evmHealth.en) : (lang === 'ar' ? 'لا توجد بيانات' : 'No data')}
+                  !evmPosition.quadrant ? 'badge-neutral'
+                  : evmPosition.quadrant.tone === 'ok' ? 'badge-ok'
+                  : evmPosition.quadrant.tone === 'gold' ? 'badge-gold'
+                  : evmPosition.quadrant.tone === 'warn' ? 'badge-warn'
+                  : evmPosition.quadrant.tone === 'risk' ? 'badge-risk' : 'badge-neutral')}>
+                  {evmPosition.quadrant
+                    ? (lang === 'ar' ? evmPosition.quadrant.ar : evmPosition.quadrant.en)
+                    : (lang === 'ar' ? 'لا توجد بيانات' : 'No data')}
                 </span>
+                {evmPosition.onTarget && (
+                  <span className="text-(length:--t-micro) tracking-widest text-primary border border-primary/30 bg-primary/[0.07] px-1.5 py-0.5 number-ltr">
+                    {lang === 'ar' ? 'على الهدف ±٥٪' : 'ON TARGET ±5%'}
+                  </span>
+                )}
               </div>
-              {evmHealth && (evmHealth.tone !== 'ok' && evmHealth.tone !== 'muted') && (
+              {evmPosition.health && evmPosition.quadrant && evmPosition.quadrant.key !== 'unknown'
+                && evmPosition.health.tone !== 'ok' && evmPosition.health.tone !== 'muted' && (
                 <div className="kpi-sub">
-                  {lang === 'ar' ? (evmHealth.reasonsAr[0] ?? '') : (evmHealth.reasons[0] ?? '')}
+                  {lang === 'ar' ? (evmPosition.health.reasonsAr[0] ?? '') : (evmPosition.health.reasons[0] ?? '')}
                 </div>
               )}
             </div>

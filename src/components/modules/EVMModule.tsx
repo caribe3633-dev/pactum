@@ -564,15 +564,24 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
               <div className={cn('font-mono text-base font-semibold number-ltr', x.c)}>{x.v}</div>
             </div>
           ))}
-          {/* Intelligent status — classified, never hard-coded. */}
-          <div className="bg-black/30 px-4 py-3" title={(isRtl ? health.reasonsAr : health.reasons).join(' · ')}>
+          {/* CURRENT POSITION — the Matrix's own state, in the header tile:
+              ahead/behind × under/over budget, straight from SPI and CPI.
+              The old Healthy/Watch/Critical verdict moves into the tooltip
+              (with its reasons) so no signal is lost. */}
+          <div className="bg-black/30 px-4 py-3"
+               title={[isRtl ? health.ar : health.en, ...(isRtl ? health.reasonsAr : health.reasons)].join(' · ')}>
             <div className="text-(length:--t-label) font-medium uppercase tracking-widest text-muted-foreground mb-1">
               {isRtl ? 'الحالة' : 'EVM Health'}
             </div>
-            <div className="flex items-center gap-2">
-              <span className={cn('badge', healthBadge(health.tone))}>
-                {isRtl ? health.ar : health.en}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn('badge', healthBadge(quadrant.tone))}>
+                {isRtl ? quadrant.ar : quadrant.en}
               </span>
+              {onTarget && (
+                <span className="text-(length:--t-micro) tracking-widest text-primary border border-primary/30 bg-primary/[0.07] px-1.5 py-0.5 number-ltr">
+                  {isRtl ? 'على الهدف ±٥٪' : 'ON TARGET ±5%'}
+                </span>
+              )}
               <span className="font-mono text-xs text-muted-foreground number-ltr">
                 {snap.score === null ? '—' : snap.score}
               </span>
