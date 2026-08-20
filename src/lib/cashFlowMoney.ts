@@ -245,6 +245,17 @@ export interface CashSeriesPoint {
   cumPlanned: number;
   /** Running total of ACTUAL net — the stored `cumNet`. */
   cumActual: number;
+  /** Running total of PLANNED IN — holds flat across an unplanned period. */
+  cumPlannedIn: number;
+  /** Running total of PLANNED OUT — holds flat across an unplanned period. */
+  cumPlannedOut: number;
+  /** Running total of ACTUAL cash in. */
+  cumIn: number;
+  /** Running total of ACTUAL cash out. */
+  cumOut: number;
+  /** Running total of ACTUAL net, recomputed in date order — NOT the
+   *  legacy stored `cumNet`, which was accumulated in entry order. */
+  cumNet: number;
   /** True when this period stated a plan. */
   planned: boolean;
 }
@@ -269,9 +280,20 @@ export interface CashSeriesPoint {
 export function cashSeries(rows: any[]): CashSeriesPoint[] {
   const list = Array.isArray(rows) ? rows : [];
   let cumP = 0;
+  let cumPI = 0, cumPO = 0, cumI = 0, cumO = 0;
   return list.map(r => {
     const v = cashVariance(r);
     cumP += v.plannedNet;
+    // An unplanned period contributes 0 to every planned curve — the
+    // running totals HOLD FLAT, never fall, never break. Actual running
+    // totals are computed here so the cumulative view never depends on
+    // the legacy entry-order `cumNet` field.
+    cumPI += v.planned ? v.plannedIn : 0;
+    cumPO += v.planned ? v.plannedOut : 0;
+    const aIn = Number(r?.in) || 0;
+    const aOut = Number(r?.out) || 0;
+    cumI += aIn;
+    cumO += aOut;
     return {
       month: String(r?.month ?? ''),
       /**
@@ -285,11 +307,74 @@ export function cashSeries(rows: any[]): CashSeriesPoint[] {
        */
       plannedIn: v.planned ? v.plannedIn : null,
       plannedOut: v.planned ? v.plannedOut : null,
-      in: Number(r?.in) || 0,
-      out: Number(r?.out) || 0,
+      in: aIn,
+      out: aOut,
       cumPlanned: cumP,
       cumActual: Number(r?.cumNet) || 0,
+      cumPlannedIn: cumPI,
+      cumPlannedOut: cumPO,
+      cumIn: cumI,
+      cumOut: cumO,
+      cumNet: cumI - cumO,
       planned: v.planned,
+    };
+  });
+}
+
+// ── Cumulative position table ─────────────────────────────────────────
+
+export interface CashCumRow {
+  month: string;
+  /** True when THIS period stated a plan. False means the planned
+   *  columns beside it are CARRIED, not newly stated — print them muted. */
+  planned: boolean;
+  cumPlannedIn: number;
+  cumPlannedOut: number;
+  cumPlannedNet: number;
+  cumIn: number;
+  cumOut: number;
+  cumNet: number;
+  /** Cumulative actual net − cumulative planned net: how far the running
+   *  balance has drifted from the plan stated so far. The commercial
+   *  headline of the cumulative view. */
+  variance: number;
+}
+
+/**
+ * The CUMULATIVE POSITION, one row per period, oldest → newest.
+ *
+ * DERIVED, NEVER STORED — the platform's standing rule: entry stays
+ * period by period, and every cumulative figure is a pure function of
+ * those rows, so the two can never disagree. The caller owns the ORDER:
+ * pass rows chronologically (`chronoRows`), exactly as `cashSeries` is
+ * fed — the module, not this function, decides what "in order" means.
+ *
+ * An unplanned period holds the planned columns flat (carries the last
+ * stated cumulative) and flags `planned: false`; the variance column
+ * keeps answering against the plan stated so far, exactly as the chart
+ * curve does.
+ */
+export function cashCumulativeTable(rows: any[]): CashCumRow[] {
+  const list = Array.isArray(rows) ? rows : [];
+  let cPI = 0, cPO = 0, cI = 0, cO = 0;
+  return list.map(r => {
+    const v = cashVariance(r);
+    cPI += v.planned ? v.plannedIn : 0;
+    cPO += v.planned ? v.plannedOut : 0;
+    const aIn = Number(r?.in) || 0;
+    const aOut = Number(r?.out) || 0;
+    cI += aIn;
+    cO += aOut;
+    return {
+      month: String(r?.month ?? ''),
+      planned: v.planned,
+      cumPlannedIn: cPI,
+      cumPlannedOut: cPO,
+      cumPlannedNet: cPI - cPO,
+      cumIn: cI,
+      cumOut: cO,
+      cumNet: cI - cO,
+      variance: (cI - cO) - (cPI - cPO),
     };
   });
 }

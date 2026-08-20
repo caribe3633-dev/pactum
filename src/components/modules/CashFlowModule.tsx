@@ -6,7 +6,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Area,
 } from 'recharts';
-import { Plus, Trash2, RefreshCw, ArrowRightLeft, CheckCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, ArrowRightLeft, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, CalendarRange, TrendingUp } from 'lucide-react';
 // The platform's single date renderer — `30 June 2025` everywhere.
 import { formatDate } from '../../lib/dateFormat';
 import { EditableNumber, EditableText } from '../EditableCell';
@@ -24,7 +24,7 @@ import { monthLabel, windowOf,
 } from '../../lib/cashFlowDates';
 // SPRINT 1 · TASK 2 — a cash row must say what currency it is counted in.
 // Shared with CertsModule (the second writer) so both produce one shape.
-import { convertCashRow, noRateMessage, cashVariance, cashVarianceTotals, cashSeries } from '../../lib/cashFlowMoney';
+import { convertCashRow, noRateMessage, cashVariance, cashVarianceTotals, cashSeries, cashCumulativeTable } from '../../lib/cashFlowMoney';
 import { moneyContext, resolveTxnDate, transactionContext, readTransactionMoney } from '../../lib/moneyEntry';
 import { contractCurrencyOf } from '../../lib/projectCurrency';
 import { companyIdOfProject } from '../../lib/projectMaster';
@@ -113,9 +113,24 @@ function appendCashflowSyncLog(projectId: string, entries: SyncEntry[]): void {
 
 // ── Main Component ────────────────────────────────────────────────────
 
+// ── Internal tabs — the EVM pattern, two views of one truth ───────────
+//
+// PERIODS    : entry, exactly as it has always been — one row per period,
+//              typed inline. Nothing about the way data goes in changes.
+// CUMULATIVE : a derived, READ-ONLY view of the same rows — running sums
+//              and S-curves. Nothing cumulative is ever typed anywhere.
+type CashTab = 'periods' | 'cumulative';
+const CASH_TABS: { id: CashTab; icon: any; en: string; ar: string }[] = [
+  { id: 'periods',    icon: CalendarRange, en: 'Periods',    ar: 'الفترات' },
+  { id: 'cumulative', icon: TrendingUp,    en: 'Cumulative', ar: 'التراكمي' },
+];
+
 export default function CashFlowModule({ project, canEdit = true }: { project: Project; canEdit?: boolean }) {
   const { t, lang } = useTranslation();
   const [data,    setData]    = useState<CashRow[]>([]);
+  // Which internal view is open. Entry lives on PERIODS; the default is
+  // the entry view so the screen opens exactly where the work happens.
+  const [tab, setTab] = useState<CashTab>('periods');
   const [syncLog, setSyncLog] = useState<SyncEntry[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -263,19 +278,17 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
   const chronoRows = useMemo(() => chrono.map(x => x.row), [chrono]);
 
   /**
-   * Cumulative ACTUAL, recomputed in date order.
-   *
-   * The stored `cumNet` was accumulated in ENTRY order, so it disagreed
-   * with the dates on screen. It is recomputed here for display and the
-   * stored field is left alone — rewriting it would restate history to
-   * fix a presentation problem.
+   * Cumulative ACTUAL — now derived whole by `cashCumulativeTable`
+   * (fed the same chrono rows), which the Cumulative tab renders. The
+   * old per-row helper is gone; the stored `cumNet` field is still left
+   * untouched — nothing on disk is ever restated to fix a view.
    */
-  const chronoCumNet = useMemo(() => {
-    let c = 0;
-    return chronoRows.map(r => { c += (Number(r.in) || 0) - (Number(r.out) || 0); return c; });
-  }, [chronoRows]);
 
   const series = useMemo(() => cashSeries(chronoRows), [chronoRows]);
+
+  /** The cumulative table's rows — derived from the same chrono rows,
+   *  read-only, never stored. Same order: oldest → newest. */
+  const cumRows = useMemo(() => cashCumulativeTable(chronoRows), [chronoRows]);
 
   /** Newest → oldest, for the table only. */
   const display = useMemo(() => chrono.slice().reverse(), [chrono]);
@@ -743,6 +756,30 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
         solid is what happened.
         ══════════════════════════════════════════════════════════════════ */}
 
+      {/* ONE MODULE, TWO INTERNAL TABS — the EVM pattern. Entry stays
+          period by period on the first tab; the cumulative tab is a
+          derived, read-only view of the very same rows. */}
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        {CASH_TABS.map(x => (
+          <button
+            key={x.id}
+            onClick={() => setTab(x.id)}
+            className={cn(
+              'inline-flex items-center gap-2 px-4 py-2 text-xs border rounded-md transition-colors uppercase tracking-wider',
+              tab === x.id
+                ? 'bg-primary/10 text-primary border-primary'
+                : 'border-white/[0.06] text-muted-foreground hover:text-white',
+            )}
+          >
+            <x.icon className="w-3.5 h-3.5" />
+            {lang === 'ar' ? x.ar : x.en}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'periods' && (
+      <>
+
       {/* Chart 1 — period flow: planned vs actual, in and out */}
       <div className="ds-card ds-card-raised" style={{ height: 380 }}>
         <h3 className="text-sm font-serif uppercase tracking-widest text-primary mb-4">
@@ -781,7 +818,15 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
         </ResponsiveContainer>
       </div>
 
-      {/* Chart 2 — cumulative: planned vs actual */}
+      </>
+      )}
+
+      {tab === 'cumulative' && (
+      <>
+
+      {/* Chart 2 — cumulative: the full S-curve family, in / out / net,
+          planned (pale + dashed) against actual (deep + solid). Same
+          magnitude on every series, so one axis serves them all. */}
       <div className="ds-card ds-card-raised" style={{ height: 380 }}>
         <h3 className="text-sm font-serif uppercase tracking-widest text-primary mb-4">
           {lang === 'ar' ? 'التراكمي — مخطط مقابل فعلي' : 'Cumulative — Planned vs Actual'}
@@ -795,20 +840,166 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
             <Tooltip {...tooltipStyle} formatter={(v: number) => formatMoney(v, { currency: money.base })} />
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
 
+            {/* PLAN (pale + dashed) before ACTUAL (deep + solid), in before
+                out before net — the same reading order as the tables. All
+                six are cumulative, so they share one axis honestly. */}
+            {hasAnyPlan && (
+              <Line type="monotone" dataKey="cumPlannedIn"
+                    name={lang === 'ar' ? 'تراكمي وارد مخطط' : 'Cum. Planned In'}
+                    stroke="#7fcf95" strokeWidth={2} strokeDasharray="6 4"
+                    dot={false} connectNulls={false} />
+            )}
+            <Line type="monotone" dataKey="cumIn"
+                  name={lang === 'ar' ? 'تراكمي وارد فعلي' : 'Cum. Cash In'}
+                  stroke="#2f6b45" strokeWidth={2.5} dot={false} />
+            {hasAnyPlan && (
+              <Line type="monotone" dataKey="cumPlannedOut"
+                    name={lang === 'ar' ? 'تراكمي صادر مخطط' : 'Cum. Planned Out'}
+                    stroke="#e8736d" strokeWidth={2} strokeDasharray="6 4"
+                    dot={false} connectNulls={false} />
+            )}
+            <Line type="monotone" dataKey="cumOut"
+                  name={lang === 'ar' ? 'تراكمي صادر فعلي' : 'Cum. Cash Out'}
+                  stroke="#a02c26" strokeWidth={2.5} dot={false} />
+            {/* Net planned: the planned balance trajectory. */}
             {hasAnyPlan && (
               <Line type="monotone" dataKey="cumPlanned"
-                    name={lang === 'ar' ? 'التراكمي المخطط' : 'Cum. Planned'}
+                    name={lang === 'ar' ? 'الصافي المخطط التراكمي' : 'Cum. Planned Net'}
                     stroke="#f0d060" strokeWidth={2} strokeDasharray="8 5"
                     dot={false} connectNulls={false} />
             )}
-            <Area type="monotone" dataKey="cumActual"
-                  name={hasAnyPlan
-                    ? (lang === 'ar' ? 'التراكمي الفعلي' : 'Cum. Actual')
-                    : t.cumulative}
+            {/* Net actual: recomputed in date order, so the curve and the
+                cumulative table below can never tell two stories. */}
+            <Area type="monotone" dataKey="cumNet"
+                  name={lang === 'ar' ? 'الصافي الفعلي التراكمي' : 'Cum. Actual Net'}
                   fill="#b8912a12" stroke="#b8912a" strokeWidth={2.5} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+        {/* CUMULATIVE POSITION — read-only, derived from the periods.
+            Nothing here is typed; it is the same rows, summed in order.
+            Oldest → newest so the running total reads naturally top-down. */}
+        <div>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <h3 className="sec-head !mb-0 flex-1">
+              {lang === 'ar' ? 'الموقف التراكمي' : 'Cumulative Position'}
+            </h3>
+            <span className="text-(length:--t-micro) uppercase tracking-widest text-muted-foreground border border-white/[0.06] px-2 py-0.5">
+              {lang === 'ar' ? 'قراءة فقط · مشتق من الفترات' : 'READ-ONLY · DERIVED FROM PERIODS'}
+            </span>
+          </div>
+          <div className="ds-table-wrap">
+            <table className="ds-table">
+              <thead>
+                <tr>
+                  <th className="col-pin">{t.month}</th>
+                  {anyPlanned && (
+                    <>
+                      <th className="money">{lang === 'ar' ? 'تراكمي وارد مخطط' : 'Cum. Planned In'}</th>
+                      <th className="money">{lang === 'ar' ? 'تراكمي صادر مخطط' : 'Cum. Planned Out'}</th>
+                    </>
+                  )}
+                  <th className="money">{lang === 'ar' ? 'تراكمي وارد فعلي' : 'Cum. Cash In'}</th>
+                  <th className="money">{lang === 'ar' ? 'تراكمي صادر فعلي' : 'Cum. Cash Out'}</th>
+                  <th className="money">{lang === 'ar' ? 'تراكمي الصافي' : 'Cumulative Net'}</th>
+                  {anyPlanned && (
+                    <th className="money">
+                      {lang === 'ar' ? 'الانحراف التراكمي' : 'Cumulative Variance'}
+                      <span className="block text-(length:--t-micro) font-normal normal-case tracking-normal text-muted-foreground">
+                        {lang === 'ar' ? 'فعلي − مخطط' : 'actual − planned'}
+                      </span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {cumRows.length === 0 && (
+                  <tr><td colSpan={7}><div className="ds-empty"><div className="ds-empty-title">{t.noData}</div></div></td></tr>
+                )}
+                {cumRows.map((r, i) => {
+                  // Muted planned cells on a period that stated no plan:
+                  // the figure is CARRIED, not newly stated — printing it
+                  // full-strength would claim a plan nobody made.
+                  const carried = !r.planned;
+                  return (
+                    <tr key={i}>
+                      <td className="col-pin font-mono">
+                        {(() => {
+                          const d = normaliseIso(r.month);
+                          const w = d ? windowOf(d) : (/^\d{4}-\d{2}/.test(r.month) ? r.month.slice(0, 7) : '');
+                          return w ? monthLabel(w) : r.month;
+                        })()}
+                      </td>
+                      {anyPlanned && (
+                        <>
+                          <td className={cn('money', carried ? 'text-muted-foreground/60' : 'money-pos')}
+                              title={carried ? (lang === 'ar' ? 'الفترة بلا خطة — قيمة محمولة' : 'No plan stated this period — carried forward') : undefined}>
+                            {formatMoney(r.cumPlannedIn, { currency: money.base })}
+                          </td>
+                          <td className={cn('money', carried ? 'text-muted-foreground/60' : 'money-neg')}
+                              title={carried ? (lang === 'ar' ? 'الفترة بلا خطة — قيمة محمولة' : 'No plan stated this period — carried forward') : undefined}>
+                            {formatMoney(r.cumPlannedOut, { currency: money.base })}
+                          </td>
+                        </>
+                      )}
+                      <td className="money money-pos">{formatMoney(r.cumIn, { currency: money.base })}</td>
+                      <td className="money money-neg">{formatMoney(r.cumOut, { currency: money.base })}</td>
+                      <td className={cn('money font-semibold', r.cumNet >= 0 ? 'money-pos' : 'money-neg')}>
+                        {formatMoney(r.cumNet, { currency: money.base })}
+                      </td>
+                      {anyPlanned && (
+                        <td className={cn('money font-semibold',
+                          r.variance > 0 ? 'money-pos' : r.variance < 0 ? 'money-neg' : 'text-muted-foreground')}>
+                          {r.variance > 0 ? '+' : ''}{formatMoney(r.variance, { currency: money.base })}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {/* Closing row — the last period's cumulatives, stated once
+                    more so the reader does not hunt for them in the tail. */}
+                {cumRows.length > 0 && (() => {
+                  const last = cumRows[cumRows.length - 1];
+                  return (
+                    <tr className="border-t-2 border-primary/30 font-semibold">
+                      <td className="col-pin text-primary uppercase tracking-wider">
+                        {lang === 'ar' ? 'المقفل' : 'Closing'}
+                      </td>
+                      {anyPlanned && (
+                        <>
+                          <td className="money money-pos">{formatMoney(last.cumPlannedIn, { currency: money.base })}</td>
+                          <td className="money money-neg">{formatMoney(last.cumPlannedOut, { currency: money.base })}</td>
+                        </>
+                      )}
+                      <td className="money money-pos">{formatMoney(last.cumIn, { currency: money.base })}</td>
+                      <td className="money money-neg">{formatMoney(last.cumOut, { currency: money.base })}</td>
+                      <td className={cn('money', last.cumNet >= 0 ? 'money-pos' : 'money-neg')}>
+                        {formatMoney(last.cumNet, { currency: money.base })}
+                      </td>
+                      {anyPlanned && (
+                        <td className={cn('money', last.variance > 0 ? 'money-pos' : last.variance < 0 ? 'money-neg' : 'text-muted-foreground')}>
+                          {last.variance > 0 ? '+' : ''}{formatMoney(last.variance, { currency: money.base })}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
+            {lang === 'ar'
+              ? 'قراءة فقط — يُشتق تلقائيًا من جدول الفترات بالترتيب الزمني، ولا يُدخَل يدويًا. الفترات بلا خطة تحمل آخر تراكمي مخطط (باهت).'
+              : 'Read-only — derived automatically from the period ledger in date order; nothing here is entered by hand. Periods without a plan carry the last stated cumulative (muted).'}
+          </p>
+        </div>
+
+      </>
+      )}
+
+      {tab === 'periods' && (
+      <>
 
       {/* Ledger table */}
       <div>
@@ -1050,16 +1241,12 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
                   <th className="money">{lang === 'ar' ? 'الانحراف' : 'Variance'}</th>
                 )}
                 <th className="money">{t.net}</th>
-                {anyPlanned && (
-                  <th className="money">
-                    {lang === 'ar' ? 'التراكمي المخطط' : 'Cum. Planned'}
-                  </th>
-                )}
-                <th className="money">
-                  {anyPlanned
-                    ? (lang === 'ar' ? 'التراكمي الفعلي' : 'Cum. Actual')
-                    : t.cumulative}
-                </th>
+                {/* CUMULATIVE COLUMNS REMOVED FROM THE ENTRY TABLE.
+                    They now live whole on the Cumulative tab — one table
+                    per idea: this one is what happened each period and is
+                    editable; that one is the running position and is
+                    read-only. Keeping both here made the widest table in
+                    the platform wider to say something twice. */}
                 {canEdit && <th className="col-act" />}
               </tr>
             </thead>
@@ -1074,8 +1261,7 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
                 `pos` is the chronological position, used for cumulative
                 lookups.
               */}
-              {display.map(({ row, originalIndex: i, }, revIdx) => {
-                const pos = display.length - 1 - revIdx;   // index in chrono
+              {display.map(({ row, originalIndex: i, }) => {
                 return (
                 <tr key={i}>
                   <td className="col-pin text-white">
@@ -1165,19 +1351,8 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
                   <td className={cn('money', row.net >= 0 ? 'money-pos' : 'money-neg')}>
                     {formatMoney(row.net, { currency: money.base })}
                   </td>
-                  {anyPlanned && (
-                    <td className={cn('money',
-                      !series[pos]?.planned && (series[pos]?.cumPlanned ?? 0) === 0
-                        ? 'text-muted-foreground'
-                        : (series[pos]?.cumPlanned ?? 0) >= 0 ? 'money-pos' : 'money-neg')}>
-                      {formatMoney(series[pos]?.cumPlanned ?? 0, { currency: money.base })}
-                    </td>
-                  )}
-                  {/* Date-ordered, not the stored `cumNet` which was
-                      accumulated in entry order. Nothing is rewritten. */}
-                  <td className={cn('money', (chronoCumNet[pos] ?? 0) >= 0 ? 'money-pos' : 'money-neg')}>
-                    {formatMoney(chronoCumNet[pos] ?? 0, { currency: money.base })}
-                  </td>
+                  {/* Cumulative cells moved to the Cumulative tab's table,
+                      derived through `cashCumulativeTable`. */}
                   {canEdit && (
                     <td className="col-act">
                       <button onClick={() => handleDelete(i)} aria-label={lang === 'ar' ? 'حذف' : 'Delete'} className="text-muted-foreground hover:text-destructive transition-colors p-1.5">
@@ -1192,6 +1367,8 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
