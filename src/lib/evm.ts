@@ -167,6 +167,13 @@ export interface EvmSettings {
   activeBaselineId?: string;
   /** How PV is spread. Defaults to the S-curve assumption. */
   pvMethod?: PvMethod;
+  /**
+   * DATA DATE. 'auto' (default): report as of the latest period carrying
+   * ACTUALS — an empty or not-yet-arrived current month never drives the
+   * numbers. Or a period id: the report is pinned there, for the month
+   * that is entered but knowingly incomplete.
+   */
+  reportingCutoff?: string;
 }
 
 /**
@@ -1149,28 +1156,46 @@ export function latestApproved(periods: EvmPeriod[]): EvmPeriod | null {
 }
 
 /**
- * The period the dashboard reports on.
+ * The period the dashboard reports on — the DATA DATE.
  *
- * FIX (user report: "cumulative totals look wrong"): the dashboard used to
- * pin itself to the LATEST APPROVED period and ignore the live period the
- * user is typing into — so freshly entered cumulative PV/EV/AC never showed
- * and the cards looked stale/incorrect. Rule now:
+ * ══════════════════════════════════════════════════════════════════════
+ * AN EMPTY MONTH IS NOT A RESULT.
  *
- *   1. the CURRENT period by date, if it carries any entered figure;
- *   2. else the latest approved period (nothing entered yet this period);
- *   3. else the current period anyway, so the page is never blank.
+ * The old rule counted PV as "data", and PV is auto-planned on every
+ * period — so a current month whose EV/AC had not been entered yet
+ * answered the whole dashboard with zeros: SPI 0, a hopeless EAC, a
+ * project that "collapsed" the day the calendar turned. The arithmetic
+ * was never wrong; it was answering a question nobody asked — "what if
+ * the month ended today with nothing recorded?"
  *
- * Approved ACTUALS stay frozen on their rows and the history table still
- * prints them — this only changes which period the headline cards report.
+ * AUTO (default): the latest period, up to today's position in the
+ * calendar, that carries ACTUALS (EV or AC > 0), live or approved —
+ * freshly typed figures still appear immediately (the earlier fix this
+ * function made, preserved). Nothing carries actuals yet: the latest
+ * APPROVED period reports; failing that the current period anyway, so
+ * the page is never blank.
+ *
+ * MANUAL: settings.reportingCutoff pins the data date to one period —
+ * for the month entered but knowingly incomplete. A pinned id that no
+ * longer exists falls back to AUTO, never to silence.
+ * ══════════════════════════════════════════════════════════════════════
  */
-export function reportingPeriod(periods: EvmPeriod[], today = new Date()): EvmPeriod | null {
+export function reportingPeriod(
+  periods: EvmPeriod[], today = new Date(), cutoff = 'auto',
+): EvmPeriod | null {
   if (periods.length === 0) return null;
+  if (cutoff && cutoff !== 'auto') {
+    const pinned = periods.find(p => p.id === cutoff) ?? null;
+    if (pinned) return pinned;
+  }
   const i = currentPeriodIndex(periods, today);
-  const cur = i >= 0 ? periods[i] : null;
-  if (cur && (cur.pv > 0 || cur.ev > 0 || cur.ac > 0)) return cur;
+  const from = i >= 0 ? i : periods.length - 1;
+  for (let k = from; k >= 0; k--) {
+    if (periods[k].ev > 0 || periods[k].ac > 0) return periods[k];
+  }
   const a = latestApproved(periods);
   if (a) return a;
-  return cur ?? periods[periods.length - 1] ?? null;
+  return periods[from] ?? periods[periods.length - 1] ?? null;
 }
 
 export interface SeriesPoint {
@@ -2315,7 +2340,7 @@ export function snapshot(project: ProjectLike, store: EvmStore, today = new Date
     ? pkgSplit.totalBac
     : (bl ? bl.bac : derived.bac);
 
-  const period = reportingPeriod(store.periods, today);
+  const period = reportingPeriod(store.periods, today, store.settings.reportingCutoff ?? 'auto');
   const idx = period ? store.periods.findIndex(p => p.id === period.id) : -1;
   const prev = idx > 0 ? store.periods[idx - 1] : null;
 

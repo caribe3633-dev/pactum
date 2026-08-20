@@ -331,6 +331,10 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   };
   const setEacMethod = (v: EvmStore['settings']['eacMethod']) =>
     persist({ ...store, settings: { ...store.settings, eacMethod: v } });
+  /** DATA DATE — pin the report to one period, or let AUTO follow the
+   *  latest period that actually carries actuals. */
+  const setReportingCutoff = (v: string) =>
+    persist({ ...store, settings: { ...store.settings, reportingCutoff: v } });
   const setBacOverride = (v: number) =>
     persist(refreshCurrent(project, syncCalendar(project, {
       ...store, settings: { ...store.settings, bacOverride: v },
@@ -852,6 +856,27 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                      placeholder={String(Math.round(bac))}
                      onChange={e => setBacOverride(Number(e.target.value) || 0)} />
             </div>
+            {/* DATA DATE — which period the whole report answers from.
+                AUTO skips months with no actuals yet, so an empty current
+                month can never drive the numbers; a pinned period holds
+                the report still while a month is knowingly incomplete. */}
+            <div className="field">
+              <label className="field-label">
+                {isRtl ? 'تاريخ القطع' : 'Reporting Cutoff'}
+                <span className="text-muted-foreground ms-2 normal-case tracking-normal">
+                  {isRtl ? 'أي فترة يجيب التقرير منها' : 'the period the report answers from'}
+                </span>
+              </label>
+              <select className="field-input" value={store.settings.reportingCutoff ?? 'auto'}
+                      onChange={e => setReportingCutoff(e.target.value)}>
+                <option value="auto">
+                  {isRtl ? 'تلقائي — آخر فترة ببيانات فعلية' : 'Auto — latest period with actuals'}
+                </option>
+                {store.periods.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
           {(() => {
             const pm = PV_METHODS.find(x => x.value === (store.settings.pvMethod ?? 'scurve'));
@@ -954,8 +979,8 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             </div>
             <p className="text-(length:--t-second) text-muted-foreground italic mt-3">
               {isRtl
-                ? `القيم المعروضة من فترة ${period?.label} · مصدر التكلفة الفعلية: ${acLabel(snap.acSource, true)}`
-                : `Figures from ${period?.label} · Actual cost source: ${acLabel(snap.acSource, false)}`}
+                ? `القيم المعروضة من فترة ${period?.label}${(store.settings.reportingCutoff ?? 'auto') !== 'auto' ? ' · قطع يدوي' : ''} · مصدر التكلفة الفعلية: ${acLabel(snap.acSource, true)}`
+                : `Figures from ${period?.label}${(store.settings.reportingCutoff ?? 'auto') !== 'auto' ? ' · manual cutoff' : ''} · Actual cost source: ${acLabel(snap.acSource, false)}`}
             </p>
           </div>
 
