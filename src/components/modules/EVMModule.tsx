@@ -1572,9 +1572,43 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                       */}
                       <td>
                         {hasSplit(p) ? (
-                          /* SEPARATE CLASS APPROVALS (owner rule): Direct and
-                             Indirect sign off independently; the total is
-                             approved ONLY when both are. */
+                          lens === 'direct' || lens === 'indirect' ? (
+                            /* ONE CLASS PER PAGE (owner rule): the Direct
+                               page carries the Direct signature only, the
+                               Indirect page the Indirect one. The Total
+                               page shows the pair and the total badge. */
+                            (() => {
+                              const ok = classApproved(p, lens);
+                              return (
+                                <span className="flex items-center gap-1.5">
+                                  <span className={cn('badge', ok ? 'badge-ok' : 'badge-neutral')}>
+                                    {ok
+                                      ? (isRtl ? 'معتمد ✓' : 'Approved ✓')
+                                      : (isRtl ? 'مسودة' : 'Draft')}
+                                  </span>
+                                  {canEdit && (
+                                    ok ? (
+                                      <button onClick={() => reopenCls(p, lens)}
+                                            title={isRtl ? 'إعادة فتح هذه الفئة — البيانات لا تُمسح' : 'Reopen this class — data is kept'}
+                                            className="text-(length:--t-micro) text-muted-foreground hover:text-primary underline cursor-pointer">
+                                        {isRtl ? 'إعادة فتح' : 'Reopen'}
+                                      </button>
+                                    ) : (
+                                      <button onClick={() => approveCls(p, lens)}
+                                              title={isRtl
+                                                ? 'اعتماد هذه الفئة — الإجمالي يُعتمد عند اكتمال الاثنتين'
+                                                : 'Approve this class — the total approves when both are complete'}
+                                              className="text-(length:--t-micro) text-primary hover:text-white underline cursor-pointer">
+                                        {isRtl ? 'اعتمد' : 'Approve'}
+                                      </button>
+                                    )
+                                  )}
+                                </span>
+                              );
+                            })()
+                          ) : (
+                          /* TOTAL PAGE: the pair, plus the derived total —
+                             approved ONLY when both classes are (owner rule). */
                           <span className="flex flex-col gap-1 items-start">
                             <span className={cn('badge',
                               p.status === 'approved' ? STATUS_META.approved.tone : 'badge-gold')}>
@@ -1615,6 +1649,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                               );
                             })}
                           </span>
+                          )
                         ) : canEdit && NEXT_STATUS[p.status].length > 0 ? (
                           <select
                             value={p.status}

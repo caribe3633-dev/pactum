@@ -1,1 +1,1 @@
-Separate approvals: Direct and Indirect approve independently per period — the Total approves (and freezes) only when both are signed; reopening one class keeps the other standing and never erases data. Calendar sync no longer deletes periods that fall off a new cadence/schedule grid: entered drafts, approvals and frozen snapshots all survive
+Each class page shows only its own approval: the Direct lens carries the Direct signature control only, the Indirect lens the Indirect one. The Total page stays as it is — both classes plus the total badge
