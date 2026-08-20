@@ -200,6 +200,18 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   };
   const [tab, setTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
+  // SETTINGS ARE STAGED, NOT LIVE: the panel edits a DRAFT and the Save
+  // button commits it — one deliberate act, instead of every dropdown
+  // rewriting the store (and rebuilding the calendar) on each change.
+  const [settingsDraft, setSettingsDraft] = useState({
+    cadence: store.settings.cadence,
+    eacMethod: store.settings.eacMethod,
+  });
+  useEffect(() => {
+    if (showSettings) {
+      setSettingsDraft({ cadence: store.settings.cadence, eacMethod: store.settings.eacMethod });
+    }
+  }, [showSettings, store.settings.cadence, store.settings.eacMethod]);
   const [rbOpen, setRbOpen] = useState(false);
   const [rb, setRb] = useState({ reason: '', cause: 'approved-eot' as RebaselineCause, daysAdded: '', valueAdded: '' });
   const [editV1, setEditV1] = useState(false);
@@ -331,10 +343,13 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   };
   const setEacMethod = (v: EvmStore['settings']['eacMethod']) =>
     persist({ ...store, settings: { ...store.settings, eacMethod: v } });
-  const setBacOverride = (v: number) =>
-    persist(refreshCurrent(project, syncCalendar(project, {
-      ...store, settings: { ...store.settings, bacOverride: v },
-    }).store));
+  /** Commit the staged settings — only what actually changed applies
+   *  (a cadence change rebuilds the calendar; it must not run for free). */
+  const saveSettings = () => {
+    if (settingsDraft.cadence !== store.settings.cadence) setCadence(settingsDraft.cadence);
+    if (settingsDraft.eacMethod !== store.settings.eacMethod) setEacMethod(settingsDraft.eacMethod);
+    setShowSettings(false);
+  };
 
   // ── Period editing ──
   const edit = (id: string, field: 'pv' | 'ev' | 'ac', raw: string) => {
@@ -419,12 +434,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     setEditV1(false);
   };
 
-  const setPvMethod = (mth: PvMethod) => {
-    const next = { ...store, settings: { ...store.settings, pvMethod: mth } };
-    // Switching away from manual regenerates; switching TO manual keeps
-    // whatever is already there so nothing is lost.
-    persist(mth === 'manual' ? next : redistributePv(project, next));
-  };
+  // PV DISTRIBUTION + BAC OVERRIDE SETTINGS REMOVED (owner decision):
+  // distribution is scurve until a programme is pasted (then manual),
+  // and BAC is always the signed package / derived contract total.
 
   const editableCount = store.periods.filter(p => p.status !== 'approved' && !p.frozen).length;
   const pasteParsed = pasteText.trim() ? parsePvPaste(pasteText, editableCount) : null;
@@ -812,11 +824,18 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
       {/* ══ SETTINGS ══ */}
       {showSettings && isAdmin && (
         <div className="ds-card ds-card-tight">
+          {/*
+            TWO SETTINGS SURVIVE, AND THEY ARE STAGED (owner decision):
+            BAC Override and PV Distribution are GONE — BAC is always the
+            signed package / derived contract total, and PV is the
+            S-curve assumption until a programme is pasted. What remains
+            edits a DRAFT; nothing touches the store until Save.
+          */}
           <div className="form-grid">
             <div className="field">
               <label className="field-label">{isRtl ? 'دورية التقييم' : 'Cadence'}</label>
-              <select className="field-input" value={store.settings.cadence}
-                      onChange={e => setCadence(e.target.value as Cadence)}>
+              <select className="field-input" value={settingsDraft.cadence}
+                      onChange={e => setSettingsDraft(d => ({ ...d, cadence: e.target.value as Cadence }))}>
                 {CADENCE_META.map(c => (
                   <option key={c.value} value={c.value}>{isRtl ? c.ar : c.en}</option>
                 ))}
@@ -824,50 +843,27 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             </div>
             <div className="field">
               <label className="field-label">{isRtl ? 'طريقة EAC' : 'EAC Method'}</label>
-              <select className="field-input" value={store.settings.eacMethod}
-                      onChange={e => setEacMethod(e.target.value as any)}>
+              <select className="field-input" value={settingsDraft.eacMethod}
+                      onChange={e => setSettingsDraft(d => ({ ...d, eacMethod: e.target.value as EvmStore['settings']['eacMethod'] }))}>
                 <option value="cpi">BAC / CPI</option>
                 <option value="atypical">AC + (BAC − EV)</option>
                 <option value="composite">AC + (BAC − EV) / (CPI × SPI)</option>
               </select>
             </div>
-            <div className="field">
-              <label className="field-label">{isRtl ? 'توزيع القيمة المخططة' : 'PV Distribution'}</label>
-              <select className="field-input" value={store.settings.pvMethod ?? 'scurve'}
-                      onChange={e => setPvMethod(e.target.value as PvMethod)}>
-                {PV_METHODS.map(x => (
-                  <option key={x.value} value={x.value}>{isRtl ? x.ar : x.en}</option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label className="field-label">
-                {isRtl ? 'تجاوز BAC' : 'BAC Override'}
-                <span className="text-muted-foreground ms-2 normal-case tracking-normal">
-                  {isRtl ? '0 = محسوب' : '0 = derived'}
-                </span>
-              </label>
-              <input className="field-input font-mono number-ltr" type="number" dir="ltr"
-                     value={store.settings.bacOverride || ''}
-                     placeholder={String(Math.round(bac))}
-                     onChange={e => setBacOverride(Number(e.target.value) || 0)} />
-            </div>
           </div>
-          {(() => {
-            const pm = PV_METHODS.find(x => x.value === (store.settings.pvMethod ?? 'scurve'));
-            return pm ? (
-              <p className="text-(length:--t-second) text-muted-foreground mt-2 flex items-start gap-1.5">
-                <Info className="w-3 h-3 mt-0.5 flex-shrink-0 text-primary/50" />
-                {isRtl ? pm.hintAr : pm.hint}
-              </p>
-            ) : null;
-          })()}
           <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
             {isRtl
-              ? `BAC = قيمة العقد ${formatMoney(snap.bacParts.base, { currency: ccy })} + أوامر تغيير معتمدة ${formatMoney(snap.bacParts.cos, { currency: ccy })} + مطالبات معتمدة ${formatMoney(snap.bacParts.claims, { currency: ccy })}`
-              : `BAC = Contract ${formatMoney(snap.bacParts.base, { currency: ccy })} + approved COs ${formatMoney(snap.bacParts.cos, { currency: ccy })} + approved claims ${formatMoney(snap.bacParts.claims, { currency: ccy })}`}
-            {snap.bacParts.overridden && (isRtl ? ' — متجاوَز يدوياً' : ' — manually overridden')}
+              ? `BAC = قيمة العقد ${formatMoney(snap.bacParts.base, { currency: ccy })} + أوامر تغيير معتمدة ${formatMoney(snap.bacParts.cos, { currency: ccy })} + مطالبات معتمدة ${formatMoney(snap.bacParts.claims, { currency: ccy })} — لا تجاوز يدوياً؛ الميزانية الموقَّعة هي الحكم.`
+              : `BAC = Contract ${formatMoney(snap.bacParts.base, { currency: ccy })} + approved COs ${formatMoney(snap.bacParts.cos, { currency: ccy })} + approved claims ${formatMoney(snap.bacParts.claims, { currency: ccy })} — no manual override; the signed budget rules.`}
           </p>
+          <div className="form-actions">
+            <button type="button" onClick={() => setShowSettings(false)} className="btn btn-ghost">
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button type="button" onClick={saveSettings} className="btn btn-primary">
+              {isRtl ? 'حفظ الإعدادات' : 'Save Settings'}
+            </button>
+          </div>
         </div>
       )}
 

@@ -155,8 +155,15 @@ export interface FrozenSnapshot {
 export interface EvmSettings {
   cadence: Cadence;
   /**
-   * Budget at Completion. 0 = derive from the contract
-   * (contract value + approved change orders + approved claims).
+   * Budget at Completion. DERIVED, ALWAYS: contract value + approved
+   * change orders + approved claims (the signed Baseline Package
+   * outranks this path entirely — see computeBacSplit).
+   *
+   * `bacOverride` is DEAD (owner decision): a typed number outranking
+   * the approved package broke totalBac = directBac + indirectBac and
+   * went silently stale the day a change order was approved. The field
+   * survives in this type only so legacy stores keep parsing; nothing
+   * obeys it.
    */
   bacOverride: number;
   /** The OFFICIAL forecast method. The other two stay visible for comparison. */
@@ -165,7 +172,13 @@ export interface EvmSettings {
   allowManual: boolean;
   /** Active baseline version id. '' = the implicit V1 derived from the project. */
   activeBaselineId?: string;
-  /** How PV is spread. Defaults to the S-curve assumption. */
+  /**
+   * How PV is spread. NOT USER-CHOOSABLE any more (owner decision): the
+   * distribution setting was removed — PV is the S-curve assumption
+   * until a real programme is pasted, which switches it to 'manual'.
+   * front/back/linear are dead values; a legacy store reading them is
+   * normalized to 'scurve' on load.
+   */
   pvMethod?: PvMethod;
 }
 
@@ -419,7 +432,7 @@ export function readEvm(projectId: string): EvmStore {
         eacMethod: ['cpi', 'atypical', 'composite'].includes(s.eacMethod) ? s.eacMethod : 'cpi',
         allowManual: s.allowManual !== false,
         activeBaselineId: s.activeBaselineId ? String(s.activeBaselineId) : '',
-        pvMethod: ['scurve','front','back','linear','manual'].includes(s.pvMethod) ? s.pvMethod : 'scurve',
+        pvMethod: s.pvMethod === 'manual' ? 'manual' : 'scurve',
       },
       periods: Array.isArray(raw.periods) ? deriveClassTotals(raw.periods.map(cleanPeriod)) : [],
       baselines: Array.isArray(raw.baselines) ? raw.baselines.map(cleanBaseline) : [],
@@ -533,8 +546,11 @@ export function computeBac(project: ProjectLike, settings: EvmSettings): {
   } catch { /* noop */ }
 
   const derived = base + cos + claims;
-  const overridden = settings.bacOverride > 0;
-  return { bac: overridden ? settings.bacOverride : derived, base, cos, claims, overridden };
+  // BAC OVERRIDE IS DEAD (owner decision): a typed number outranking the
+  // approved package broke totalBac = directBac + indirectBac and went
+  // silently stale the day a change order was approved. BAC is always
+  // derived here; the SIGNED budget lives in the approved package.
+  return { bac: derived, base, cos, claims, overridden: false };
 }
 
 /**
@@ -571,8 +587,9 @@ export function computeBac(project: ProjectLike, settings: EvmSettings): {
  * NOT zero. A project without an approved cost baseline has no BAC, and
  * saying "0" would report perfect performance against nothing.
  *
- * `bacOverride` still wins when set: an explicit human figure outranks
- * any derivation.
+ * The package total is THE total — nothing overrides it (the old
+ * bacOverride branch was removed: it outranked a signature and broke
+ * directBac + indirectBac = totalBac).
  */
 export interface BacSplit {
   /** False when no approved baseline package exists. Never treat as 0. */
@@ -612,12 +629,10 @@ export function computeBacSplit(project: ProjectLike, settings: EvmSettings): Ba
   out.packageVersion = num(pkg.version);
   out.directBac = num(pkg.data.directBudget);
   out.indirectBac = num(pkg.data.indirectBudget);
+  // THE SIGNED PACKAGE TOTAL, UNTOUCHED. The old bacOverride branch used
+  // to replace it with a typed number — breaking totalBac = directBac +
+  // indirectBac and outranking a signature. Removed (owner decision).
   out.totalBac = out.directBac + out.indirectBac;
-
-  if (settings.bacOverride > 0) {
-    out.overridden = true;
-    out.totalBac = settings.bacOverride;
-  }
   return out;
 }
 
