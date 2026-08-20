@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { reportingPeriod, EvmPeriod } from '../src/lib/evm';
+import {
+  reportingPeriod, snapshot, DEFAULT_SETTINGS,
+  type EvmPeriod, type EvmStore, type ProjectLike,
+} from '../src/lib/evm';
 
 // ══════════════════════════════════════════════════════════════════════
 // THE DATA DATE — which period the whole report answers from.
@@ -90,5 +93,51 @@ describe('the data date — an empty month is not a result', () => {
       m(4),
     ];
     expect(reportingPeriod(periods, TODAY)?.id).toBe('m3');
+  });
+});
+
+describe('SPI / CPI quote the LATEST APPROVED period', () => {
+  const P: ProjectLike = {
+    id: 'dd-1', contractValue: 1_000_000, progress: 30,
+    commencementDate: '2025-01-01', plannedDurationDays: 365,
+    contractualCompletion: '2025-12-31',
+  };
+  const st = (periods: EvmPeriod[]): EvmStore => ({ settings: DEFAULT_SETTINGS, periods });
+
+  it('a fresher draft moves the MONEY but never the two indices', () => {
+    // M1 approved: SPI 0.80, CPI 80/70. M2 live and half-entered: its own
+    // indices would be 0.50 / 0.50 — the project is not judged by those.
+    const s = st([
+      m(1, { pv: 100, ev: 80, ac: 70, status: 'approved' }),
+      m(2, { pv: 200, ev: 100, ac: 200, status: 'draft' }),
+    ]);
+    const snap = snapshot(P, s, new Date('2025-02-15'));
+    // money reports from the data date (the live row carries actuals)
+    expect(snap.m.ev).toBe(100);
+    expect(snap.m.ac).toBe(200);
+    // the indices quote the approved record
+    expect(snap.m.spi).toBeCloseTo(0.80, 6);
+    expect(snap.m.cpi).toBeCloseTo(80 / 70, 6);
+  });
+
+  it('with nothing approved, the live indices answer (nothing better exists)', () => {
+    const s = st([
+      m(1, { pv: 100, ev: 80, ac: 70, status: 'draft' }),
+      m(2, { pv: 200, ev: 100, ac: 200, status: 'draft' }),
+    ]);
+    const snap = snapshot(P, s, new Date('2025-02-15'));
+    expect(snap.m.spi).toBeCloseTo(0.50, 6);
+    expect(snap.m.cpi).toBeCloseTo(0.50, 6);
+  });
+
+  it('the movement arrows compare approved against approved', () => {
+    const s = st([
+      m(1, { pv: 100, ev: 90, ac: 80, status: 'approved' }),   // SPI 0.90
+      m(2, { pv: 200, ev: 160, ac: 140, status: 'approved' }), // SPI 0.80
+      m(3, { pv: 300, ev: 300, ac: 300, status: 'draft' }),    // would be 1.00
+    ]);
+    const snap = snapshot(P, s, new Date('2025-03-15'));
+    expect(snap.m.spi).toBeCloseTo(0.80, 6);
+    expect(snap.prevM?.spi).toBeCloseTo(0.90, 6);
   });
 });

@@ -1,1 +1,1 @@
-Reporting Cutoff removed per user correction. Data date stays automatic: the report answers from the latest period carrying actuals (live or approved) — deliberately not approved-only, so the Baseline/EOT logic keeps driving indirect EV untouched. Total lens no longer shows AUTO/MANUAL chips
+SPI and CPI now quote the latest APPROVED period (money still reports from the auto data date; movement arrows compare approved vs approved). Performance by Cost Class table recomputed at the latest approved period and the CPI column removed — cost verdicts stay in CV/VAC

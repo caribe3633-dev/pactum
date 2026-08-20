@@ -2370,6 +2370,29 @@ export function snapshot(project: ProjectLike, store: EvmStore, today = new Date
     prevM = { ...prevRec, bac, eac: pe, etc: pe - prevRec.ac, vac: bac - pe };
   }
 
+  /**
+   * ONE APPROVAL, ONE NUMBER — FOR THE INDICES (user rule).
+   *
+   * SPI and CPI quote the LATEST APPROVED period, even while the data
+   * date runs on to a fresher live row: a half-entered month must not
+   * move the efficiency the project is judged by. Its money still
+   * reports normally in PV/EV/AC — only the two indices are pinned.
+   * The previous indices follow the row BEFORE that approved period,
+   * so the movement arrows compare like with like.
+   */
+  const ap = latestApproved(store.periods);
+  if (ap) {
+    const am = periodMetrics(ap, bac, store.settings.eacMethod, cumulativeTo(store.periods, ap));
+    m.spi = am.spi;
+    m.cpi = am.cpi;
+    const ai = store.periods.findIndex(p => p.id === ap.id);
+    const apPrev = ai > 0 ? store.periods[ai - 1] : null;
+    if (apPrev && prevM) {
+      const pm2 = periodMetrics(apPrev, bac, store.settings.eacMethod, cumulativeTo(store.periods, apPrev));
+      prevM = { ...prevM, spi: pm2.spi, cpi: pm2.cpi };
+    }
+  }
+
   const dates = forecastDates(project, m.spi, today);
   const health = classifyHealth(
     m.spi, m.cpi, m.vac, bac, dates.slipDays,

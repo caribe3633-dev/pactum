@@ -29,7 +29,7 @@ import {
   STATUS_META, NEXT_STATUS, ACTIVE_STATUSES, currentPeriodIndex,
   EvmStore, EvmPeriod, PeriodStatus, Cadence, EvmSnapshot,
   // ── Refinement additions ──
-  periodMetrics, cumulativeTo, eacComparison, EAC_META, EacMethod, EacOption,
+  periodMetrics, cumulativeTo, eacComparison, EAC_META, EacMethod, EacOption, latestApproved,
   classifyHealth, HealthVerdict, activeBaseline, rebaseline, seedBaseline,
   generateFuturePeriods, redistributePv, effectiveBounds,
   CADENCE_META, REBASELINE_CAUSES, RebaselineCause, Baseline,
@@ -1641,8 +1641,17 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
           cannot be outvoted by a small one.
           ══════════════════════════════════════════════════════════════
         */}
-        {period && bacSplit.available && hasSplit(period) && (() => {
-          const cm = classMetrics(store.periods, period, bacSplit, store.settings.eacMethod);
+        {period && bacSplit.available && hasSplit(latestApproved(store.periods) ?? period) && (() => {
+          /* PERFORMANCE RECORD, NOT LIVE TYPING: this table answers from
+             the LATEST APPROVED period — the signed month. Computing it
+             on the live reporting row let a half-entered month shift
+             every class figure before anyone had approved it. CPI is
+             gone per owner decision: a per-class CPI divides a class's
+             EV by its AC, and the indirect class carries little or no
+             AC by nature — the column answered a question the classes
+             cannot support. Cost verdicts live in CV / VAC. */
+          const classP = latestApproved(store.periods) ?? period;
+          const cm = classMetrics(store.periods, classP, bacSplit, store.settings.eacMethod);
           const rows = [
             { k: isRtl ? 'مباشرة' : 'Direct',      m: cm.direct },
             { k: isRtl ? 'غير مباشرة' : 'Indirect', m: cm.indirect },
@@ -1655,14 +1664,15 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   {isRtl ? 'الأداء حسب فئة التكلفة' : 'Performance by Cost Class'}
                 </h3>
                 <span className="text-(length:--t-label) uppercase tracking-widest text-muted-foreground">
-                  {period.label}
+                  {classP.label}
+                  {' · '}{isRtl ? 'آخر فترة معتمدة' : 'latest approved'}
                   {' · '}{isRtl ? 'خطة أساس' : 'baseline'} V{bacSplit.packageVersion}
                 </span>
               </div>
               <p className="text-(length:--t-second) text-muted-foreground italic mb-4">
                 {isRtl
-                  ? 'مقاييس الإجمالي محسوبة من مجاميع القيمة والتكلفة — وليست متوسط الفئتين.'
-                  : 'Total metrics are computed from summed value and cost aggregates — never averaged from the two classes.'}
+                  ? 'مقاييس الإجمالي محسوبة من مجاميع القيمة والتكلفة — وليست متوسط الفئتين — من واقع آخر فترة معتمدة.'
+                  : 'Total metrics are computed from summed value and cost aggregates — never averaged from the two classes — at the latest approved period.'}
               </p>
               <div className="ds-table-wrap">
                 <table className="ds-table">
@@ -1674,7 +1684,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                       <th className="money">EV</th>
                       <th className="money">AC</th>
                       <th className="money">CV</th>
-                      <th className="money">CPI</th>
                       <th className="money">EAC</th>
                       <th className="money">ETC</th>
                       <th className="money">VAC</th>
@@ -1691,7 +1700,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                         <td className="money">{formatMoney(r.m.ev, { currency: ccy })}</td>
                         <td className="money">{formatMoney(r.m.ac, { currency: ccy })}</td>
                         <td className={cn('money', varianceTone(r.m.cv))}>{formatMoney(r.m.cv, { currency: ccy })}</td>
-                        <td className={cn('money', indexTone(r.m.cpi))}>{fmtIndex(r.m.cpi)}</td>
                         <td className="money">{formatMoney(r.m.eac, { currency: ccy })}</td>
                         <td className="money">{formatMoney(r.m.etc, { currency: ccy })}</td>
                         <td className={cn('money', varianceTone(r.m.vac))}>{formatMoney(r.m.vac, { currency: ccy })}</td>
