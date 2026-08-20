@@ -5,9 +5,14 @@ import { reportingPeriod, EvmPeriod } from '../src/lib/evm';
 // THE DATA DATE — which period the whole report answers from.
 //
 // An empty month is not a result: PV is auto-planned on every period,
-// so the old rule (current period if ANY figure) let a month with no
-// EV/AC yet drive the dashboard with zeros. AUTO now walks back to the
-// latest period carrying ACTUALS; a manual cutoff pins the data date.
+// so counting PV as "data" let a month with no EV/AC yet drive the
+// dashboard with zeros. The rule walks back from today to the latest
+// period carrying ACTUALS.
+//
+// DELIBERATELY NOT APPROVED-ONLY (user decision): gating the report or
+// the class totals on period approval would fight the Baseline track —
+// indirect EV is time-derived from the approved schedule and EOTs, not
+// from a period's approval state. This test pins that exact rule.
 // ══════════════════════════════════════════════════════════════════════
 
 /** Monthly periods through 2025. today = inside M4. */
@@ -27,7 +32,7 @@ const m = (n: number, over: Partial<EvmPeriod> = {}): EvmPeriod => ({
 
 const TODAY = new Date('2025-04-15');   // inside M4
 
-describe('AUTO — an empty month is not a result', () => {
+describe('the data date — an empty month is not a result', () => {
   it('skips a current month with only its plan (no EV, no AC)', () => {
     const periods = [
       m(1, { ev: 80, ac: 70 }),
@@ -39,13 +44,13 @@ describe('AUTO — an empty month is not a result', () => {
   });
 
   it('still reports the live current month the moment it carries actuals', () => {
-    // The earlier fix, preserved: typed figures appear immediately,
-    // approval or not.
+    // Live typing is visible immediately — approval NOT required:
+    // the baseline track owns plan approval, not the reporting date.
     const periods = [
       m(1, { ev: 80, ac: 70 }),
       m(2, { ev: 180, ac: 160 }),
       m(3, { ev: 260, ac: 240 }),
-      m(4, { ev: 300 }),                 // EV typed, AC not yet
+      m(4, { ev: 300, status: 'draft' }),   // live EV typed, not approved
     ];
     expect(reportingPeriod(periods, TODAY)?.id).toBe('m4');
   });
@@ -75,26 +80,15 @@ describe('AUTO — an empty month is not a result', () => {
     expect(reportingPeriod(periods, TODAY)?.id).toBe('m4');
     expect(reportingPeriod([], TODAY)).toBeNull();
   });
-});
 
-describe('MANUAL cutoff — the pinned data date', () => {
-  const periods = [
-    m(1, { ev: 80, ac: 70 }),
-    m(2, { ev: 180, ac: 160 }),
-    m(3, { ev: 260, ac: 240 }),
-    m(4, { ev: 300, ac: 280 }),                       // complete current month
-  ];
-
-  it('pins the report to the chosen period, even older', () => {
-    expect(reportingPeriod(periods, TODAY, 'm2')?.id).toBe('m2');
-  });
-
-  it('a pinned id that no longer exists falls back to AUTO', () => {
-    expect(reportingPeriod(periods, TODAY, 'deleted-period')?.id).toBe('m4');
-  });
-
-  it("explicit 'auto' behaves exactly like no cutoff at all", () => {
-    expect(reportingPeriod(periods, TODAY, 'auto')?.id)
-      .toBe(reportingPeriod(periods, TODAY)?.id);
+  it('a draft with actuals outranks an older approved period', () => {
+    // The numbers are the report; the baseline track approves the plan.
+    const periods = [
+      m(1, { ev: 80, ac: 70, status: 'approved' }),
+      m(2, { ev: 180, ac: 160, status: 'approved' }),
+      m(3, { ev: 260, ac: 240, status: 'draft' }),    // fresher actuals
+      m(4),
+    ];
+    expect(reportingPeriod(periods, TODAY)?.id).toBe('m3');
   });
 });

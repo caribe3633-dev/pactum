@@ -167,13 +167,6 @@ export interface EvmSettings {
   activeBaselineId?: string;
   /** How PV is spread. Defaults to the S-curve assumption. */
   pvMethod?: PvMethod;
-  /**
-   * DATA DATE. 'auto' (default): report as of the latest period carrying
-   * ACTUALS — an empty or not-yet-arrived current month never drives the
-   * numbers. Or a period id: the report is pinned there, for the month
-   * that is entered but knowingly incomplete.
-   */
-  reportingCutoff?: string;
 }
 
 /**
@@ -1161,33 +1154,28 @@ export function latestApproved(periods: EvmPeriod[]): EvmPeriod | null {
  * ══════════════════════════════════════════════════════════════════════
  * AN EMPTY MONTH IS NOT A RESULT.
  *
- * The old rule counted PV as "data", and PV is auto-planned on every
+ * The oldest rule counted PV as "data", and PV is auto-planned on every
  * period — so a current month whose EV/AC had not been entered yet
  * answered the whole dashboard with zeros: SPI 0, a hopeless EAC, a
  * project that "collapsed" the day the calendar turned. The arithmetic
  * was never wrong; it was answering a question nobody asked — "what if
  * the month ended today with nothing recorded?"
  *
- * AUTO (default): the latest period, up to today's position in the
- * calendar, that carries ACTUALS (EV or AC > 0), live or approved —
- * freshly typed figures still appear immediately (the earlier fix this
- * function made, preserved). Nothing carries actuals yet: the latest
- * APPROVED period reports; failing that the current period anyway, so
- * the page is never blank.
+ * The rule: the latest period, up to today's position in the calendar,
+ * that carries ACTUALS (EV or AC > 0), live or approved — freshly typed
+ * figures still appear immediately. Nothing carries actuals yet: the
+ * latest APPROVED period reports; failing that the current period
+ * anyway, so the page is never blank.
  *
- * MANUAL: settings.reportingCutoff pins the data date to one period —
- * for the month entered but knowingly incomplete. A pinned id that no
- * longer exists falls back to AUTO, never to silence.
+ * DELIBERATELY NOT APPROVED-ONLY: gating the report (or the class
+ * totals feeding it) on period approval would fight the Baseline track —
+ * indirect EV is time-derived from the approved schedule and EOTs, not
+ * from a period's approval state. One track approves the plan; this
+ * track reports the numbers.
  * ══════════════════════════════════════════════════════════════════════
  */
-export function reportingPeriod(
-  periods: EvmPeriod[], today = new Date(), cutoff = 'auto',
-): EvmPeriod | null {
+export function reportingPeriod(periods: EvmPeriod[], today = new Date()): EvmPeriod | null {
   if (periods.length === 0) return null;
-  if (cutoff && cutoff !== 'auto') {
-    const pinned = periods.find(p => p.id === cutoff) ?? null;
-    if (pinned) return pinned;
-  }
   const i = currentPeriodIndex(periods, today);
   const from = i >= 0 ? i : periods.length - 1;
   for (let k = from; k >= 0; k--) {
@@ -2340,7 +2328,7 @@ export function snapshot(project: ProjectLike, store: EvmStore, today = new Date
     ? pkgSplit.totalBac
     : (bl ? bl.bac : derived.bac);
 
-  const period = reportingPeriod(store.periods, today, store.settings.reportingCutoff ?? 'auto');
+  const period = reportingPeriod(store.periods, today);
   const idx = period ? store.periods.findIndex(p => p.id === period.id) : -1;
   const prev = idx > 0 ? store.periods[idx - 1] : null;
 

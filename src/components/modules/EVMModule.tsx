@@ -331,10 +331,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   };
   const setEacMethod = (v: EvmStore['settings']['eacMethod']) =>
     persist({ ...store, settings: { ...store.settings, eacMethod: v } });
-  /** DATA DATE — pin the report to one period, or let AUTO follow the
-   *  latest period that actually carries actuals. */
-  const setReportingCutoff = (v: string) =>
-    persist({ ...store, settings: { ...store.settings, reportingCutoff: v } });
   const setBacOverride = (v: number) =>
     persist(refreshCurrent(project, syncCalendar(project, {
       ...store, settings: { ...store.settings, bacOverride: v },
@@ -856,27 +852,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                      placeholder={String(Math.round(bac))}
                      onChange={e => setBacOverride(Number(e.target.value) || 0)} />
             </div>
-            {/* DATA DATE — which period the whole report answers from.
-                AUTO skips months with no actuals yet, so an empty current
-                month can never drive the numbers; a pinned period holds
-                the report still while a month is knowingly incomplete. */}
-            <div className="field">
-              <label className="field-label">
-                {isRtl ? 'تاريخ القطع' : 'Reporting Cutoff'}
-                <span className="text-muted-foreground ms-2 normal-case tracking-normal">
-                  {isRtl ? 'أي فترة يجيب التقرير منها' : 'the period the report answers from'}
-                </span>
-              </label>
-              <select className="field-input" value={store.settings.reportingCutoff ?? 'auto'}
-                      onChange={e => setReportingCutoff(e.target.value)}>
-                <option value="auto">
-                  {isRtl ? 'تلقائي — آخر فترة ببيانات فعلية' : 'Auto — latest period with actuals'}
-                </option>
-                {store.periods.map(p => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-            </div>
           </div>
           {(() => {
             const pm = PV_METHODS.find(x => x.value === (store.settings.pvMethod ?? 'scurve'));
@@ -979,8 +954,8 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             </div>
             <p className="text-(length:--t-second) text-muted-foreground italic mt-3">
               {isRtl
-                ? `القيم المعروضة من فترة ${period?.label}${(store.settings.reportingCutoff ?? 'auto') !== 'auto' ? ' · قطع يدوي' : ''} · مصدر التكلفة الفعلية: ${acLabel(snap.acSource, true)}`
-                : `Figures from ${period?.label}${(store.settings.reportingCutoff ?? 'auto') !== 'auto' ? ' · manual cutoff' : ''} · Actual cost source: ${acLabel(snap.acSource, false)}`}
+                ? `القيم المعروضة من فترة ${period?.label} · مصدر التكلفة الفعلية: ${acLabel(snap.acSource, true)}`
+                : `Figures from ${period?.label} · Actual cost source: ${acLabel(snap.acSource, false)}`}
             </p>
           </div>
 
@@ -1500,15 +1475,20 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                       {lens === 'total' ? (
                         /* v3 — totals are READ-ONLY: always derived from the
                            Direct/Indirect components. canWrite=false on every
-                           cell closes the manual path at the UI as well. */
+                           cell closes the manual path at the UI as well.
+                           No provenance chips either: a derived figure has
+                           no AUTO/MANUAL story to tell. */
                         <>
                           <ValueCell ccy={ccy} v={p.pv} src={p.pvSource} locked={locked} canWrite={false}
+                                     hideBadge
                                      onSave={() => {}} onAuto={() => {}} />
                           <ValueCell ccy={ccy} v={p.ev} src={p.evSource} locked={locked} canWrite={false}
+                                     hideBadge
                                      onSave={() => {}} onAuto={() => {}} />
                           {/* STEP 11 — absence still reads as absence. */}
                           <ValueCell ccy={ccy} v={p.ac} src={p.acSource} locked={locked} canWrite={false}
                                      notEntered={p.acSource !== 'manual'} isRtl={isRtl}
+                                     hideBadge
                                      onSave={() => {}} onAuto={() => {}} />
                         </>
                       ) : lens === 'direct' ? (
@@ -2168,9 +2148,12 @@ function Movement({ now, was }: { now: number | null; was: number | null }) {
   );
 }
 
-/** One editable money cell with an AUTO / MANUAL provenance badge. */
+/** One editable money cell with an AUTO / MANUAL provenance badge.
+ *  `hideBadge` strips the badge — used by the Total lens, where every
+ *  figure is derived from Direct + Indirect and provenance chips beside
+ *  derived numbers only suggested a choice that does not exist. */
 function ValueCell({
-  v, src, locked, canWrite, onSave, onAuto, ccy, notEntered, isRtl,
+  v, src, locked, canWrite, onSave, onAuto, ccy, notEntered, isRtl, hideBadge,
 }: {
   v: number; src: 'auto' | 'manual'; locked: boolean; canWrite: boolean;
   onSave: (raw: string) => void; onAuto: () => void;
@@ -2184,6 +2167,8 @@ function ValueCell({
    */
   notEntered?: boolean;
   isRtl?: boolean;
+  /** Omit the AUTO / MANUAL / NOT ENTERED chips (the Total lens). */
+  hideBadge?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(Math.round(v)));
@@ -2218,7 +2203,10 @@ function ValueCell({
             ? (isRtl ? 'لم تُدخَل' : 'Not Entered')
             : formatMoney(v, { currency: ccy })}
         </span>
-        {src === 'manual' ? (
+        {/* hideBadge (Total lens): derived numbers carry no provenance to
+            state. The value itself already prints "Not Entered" when
+            nothing was recorded, so absence stays stated without chips. */}
+        {hideBadge ? null : src === 'manual' ? (
           <>
             <span className="text-(length:--t-micro) tracking-widest text-chart-5/70 border border-chart-5/25 px-1 leading-[1.4]">
               MANUAL
