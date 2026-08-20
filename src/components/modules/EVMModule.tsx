@@ -270,6 +270,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
    * ══════════════════════════════════════════════════════════════════════
    */
   const [lens, setLens] = useState<'total' | 'direct' | 'indirect'>('total');
+  // PERIODS / CUMULATIVE — the Cash Flow pattern (owner rule): entry on
+  // one view, a fully AUTOMATIC read-only cumulative view on the other.
+  const [pview, setPview] = useState<'periods' | 'cumulative'>('periods');
 
   /** BAC from the APPROVED baseline package, split by class (Q3=B/Q6=B). */
   const bacSplit: BacSplit = useMemo(
@@ -1243,6 +1246,29 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
       {/* ══════════════════ PERIODS / REVIEW WORKFLOW ══════════════════ */}
       {tab === 'periods' && (
         <>
+        {/* PERIODS / CUMULATIVE view switch — the Cash Flow pattern.
+            Entry lives on PERIODS; CUMULATIVE is fully automatic. */}
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          {([
+            { id: 'periods',    en: 'Periods',    ar: 'الفترات' },
+            { id: 'cumulative', en: 'Cumulative', ar: 'التراكمي' },
+          ] as const).map(x => (
+            <button key={x.id} onClick={() => setPview(x.id)}
+                    className={cn('inline-flex items-center gap-2 px-4 py-2 text-xs border rounded-md transition-colors uppercase tracking-wider',
+                      pview === x.id
+                        ? 'bg-primary/10 text-primary border-primary'
+                        : 'border-white/[0.06] text-muted-foreground hover:text-white')}>
+              {isRtl ? x.ar : x.en}
+            </button>
+          ))}
+          {pview === 'cumulative' && (
+            <span className="text-(length:--t-micro) uppercase tracking-widest text-muted-foreground border border-white/[0.06] px-2 py-0.5 ms-2">
+              {isRtl ? 'قراءة فقط · مشتق تلقائيًا بالكامل' : 'READ-ONLY · FULLY AUTOMATIC'}
+            </span>
+          )}
+        </div>
+
+        {pview === 'periods' && (<>
         {/* ── STEP 12 · cost-class lens ── */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1607,8 +1633,10 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                               );
                             })()
                           ) : (
-                          /* TOTAL PAGE: the pair, plus the derived total —
-                             approved ONLY when both classes are (owner rule). */
+                          /* TOTAL PAGE: READ-ONLY (owner rule). It states the
+                             approval state of each class and the derived
+                             total — the signatures themselves are cast on
+                             the class pages, never here. */
                           <span className="flex flex-col gap-1 items-start">
                             <span className={cn('badge',
                               p.status === 'approved' ? STATUS_META.approved.tone : 'badge-gold')}>
@@ -1621,30 +1649,14 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                             {(['direct', 'indirect'] as const).map(cls => {
                               const ok = classApproved(p, cls);
                               return (
-                                <span key={cls} className="flex items-center gap-1.5">
-                                  <span className={cn('badge', ok ? 'badge-ok' : 'badge-neutral')}>
-                                    {cls === 'direct'
-                                      ? (isRtl ? 'دايركت' : 'Direct')
-                                      : (isRtl ? 'اندايركت' : 'Indirect')}
-                                    {ok ? ' ✓' : ''}
-                                  </span>
-                                  {canEdit && (
-                                    ok ? (
-                                      <button onClick={() => reopenCls(p, cls)}
-                                            title={isRtl ? 'إعادة فتح الفئة — البيانات لا تُمسح' : 'Reopen this class — data is kept'}
-                                            className="text-(length:--t-micro) text-muted-foreground hover:text-primary underline cursor-pointer">
-                                        {isRtl ? 'إعادة فتح' : 'Reopen'}
-                                      </button>
-                                    ) : (
-                                      <button onClick={() => approveCls(p, cls)}
-                                              title={isRtl
-                                                ? 'اعتماد هذه الفئة — الإجمالي يُعتمد عند اكتمال الاثنتين'
-                                                : 'Approve this class — the total approves when both are complete'}
-                                              className="text-(length:--t-micro) text-primary hover:text-white underline cursor-pointer">
-                                        {isRtl ? 'اعتمد' : 'Approve'}
-                                      </button>
-                                    )
-                                  )}
+                                <span key={cls} className={cn('badge', ok ? 'badge-ok' : 'badge-neutral')}
+                                      title={ok
+                                        ? (isRtl ? 'معتمدة من صفحة الفئة' : 'approved on its class page')
+                                        : (isRtl ? 'لم تُعتمد بعد — الاعتماد من صفحة الفئة' : 'not yet approved — from its class page')}>
+                                  {cls === 'direct'
+                                    ? (isRtl ? 'دايركت' : 'Direct')
+                                    : (isRtl ? 'اندايركت' : 'Indirect')}
+                                  {ok ? ' ✓' : ''}
                                 </span>
                               );
                             })}
@@ -1811,6 +1823,105 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                     : 'Indirect EV is blocked for this period — an approved extension has no effective date.'}
                 </p>
               )}
+            </div>
+          );
+        })()}
+        </>)}
+
+        {/* ════════ CUMULATIVE — fully automatic, read-only ════════ */}
+        {pview === 'cumulative' && (() => {
+          /** Final cumulative figures: the last stated plan and the last
+           *  EARNED figures (time is not performance — future indirect
+           *  slices never count). */
+          let lastEv: number | null = null;
+          let lastAc: number | null = null;
+          let lastSv = 0, lastCv = 0;
+          for (let i = points.length - 1; i >= 0; i--) {
+            if (lastEv === null && points[i].ev !== null) { lastEv = points[i].ev; lastSv = points[i].sv; }
+            if (lastAc === null && points[i].ac !== null) { lastAc = points[i].ac; lastCv = points[i].cv; }
+            if (lastEv !== null && lastAc !== null) break;
+          }
+          const lastPv = points.length ? points[points.length - 1].pv : 0;
+          return (
+            <div>
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                <h3 className="sec-head !mb-0 flex-1">
+                  {isRtl ? 'الموقف التراكمي' : 'Cumulative Position'}
+                </h3>
+              </div>
+              <div className="ds-table-wrap">
+                <table className="ds-table">
+                  <thead>
+                    <tr>
+                      <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
+                      <th className="money">PV</th>
+                      <th className="money">EV</th>
+                      <th className="money">AC</th>
+                      <th className="money">SV</th>
+                      <th className="money">CV</th>
+                      <th className="money">SPI</th>
+                      <th className="money">CPI</th>
+                      <th className="money">EAC</th>
+                      <th className="money">VAC</th>
+                      <th>{isRtl ? 'الحالة' : 'Status'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {points.length === 0 && (
+                      <tr><td colSpan={11}><div className="ds-empty"><div className="ds-empty-title">{isRtl ? 'لا توجد فترات' : 'No periods'}</div></div></td></tr>
+                    )}
+                    {points.map(pt => (
+                      <tr key={pt.seq}>
+                        <td className="col-pin font-mono">{pt.label}</td>
+                        <td className="money">{formatMoney(pt.pv, { currency: ccy })}</td>
+                        <td className="money">{pt.ev === null ? '—' : formatMoney(pt.ev, { currency: ccy })}</td>
+                        <td className="money">{pt.ac === null ? '—' : formatMoney(pt.ac, { currency: ccy })}</td>
+                        <td className={cn('money', pt.ev === null ? 'text-muted-foreground' : varianceTone(pt.sv))}>
+                          {pt.ev === null ? '—' : formatMoney(pt.sv, { currency: ccy })}
+                        </td>
+                        <td className={cn('money', pt.ev === null ? 'text-muted-foreground' : varianceTone(pt.cv))}>
+                          {pt.ev === null ? '—' : formatMoney(pt.cv, { currency: ccy })}
+                        </td>
+                        <td className={cn('money', indexTone(pt.spi))}>{fmtIndex(pt.spi)}</td>
+                        <td className={cn('money', indexTone(pt.cpi))}>{fmtIndex(pt.cpi)}</td>
+                        <td className="money">{pt.eac === null ? '—' : formatMoney(pt.eac, { currency: ccy })}</td>
+                        <td className={cn('money', pt.vac === null ? 'text-muted-foreground' : varianceTone(pt.vac))}>
+                          {pt.vac === null ? '—' : formatMoney(pt.vac, { currency: ccy })}
+                        </td>
+                        <td>
+                          <span className={cn('badge', STATUS_META[pt.status].tone)}>
+                            {isRtl ? STATUS_META[pt.status].ar : STATUS_META[pt.status].en}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {/* TOTAL — after the last period (owner rule): the final
+                        cumulative position, stated once at the foot. */}
+                    {points.length > 0 && (
+                      <tr className="border-t-2 border-primary/30 font-semibold">
+                        <td className="col-pin text-primary uppercase tracking-wider">
+                          {isRtl ? 'الإجمالي' : 'Total'}
+                        </td>
+                        <td className="money">{formatMoney(lastPv, { currency: ccy })}</td>
+                        <td className="money">{lastEv === null ? '—' : formatMoney(lastEv, { currency: ccy })}</td>
+                        <td className="money">{lastAc === null ? '—' : formatMoney(lastAc, { currency: ccy })}</td>
+                        <td className={cn('money', varianceTone(lastSv))}>{lastEv === null ? '—' : formatMoney(lastSv, { currency: ccy })}</td>
+                        <td className={cn('money', varianceTone(lastCv))}>{lastEv === null ? '—' : formatMoney(lastCv, { currency: ccy })}</td>
+                        <td className={cn('money', indexTone(m.spi))}>{fmtIndex(m.spi)}</td>
+                        <td className={cn('money', indexTone(m.cpi))}>{fmtIndex(m.cpi)}</td>
+                        <td className="money">{formatMoney(m.eac, { currency: ccy })}</td>
+                        <td className={cn('money', varianceTone(m.vac))}>{formatMoney(m.vac, { currency: ccy })}</td>
+                        <td />
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
+                {isRtl
+                  ? 'قراءة فقط — كل رقم مشتق تلقائيًا من مدخلات الفترات؛ لا يُدخَل يدويًا. EV وAC يقفان عند آخر فترة شغّالة فعلًا.'
+                  : 'Read-only — every figure is derived automatically from the period entries; nothing is typed here. EV and AC stop at the last truly-worked period.'}
+              </p>
             </div>
           );
         })()}

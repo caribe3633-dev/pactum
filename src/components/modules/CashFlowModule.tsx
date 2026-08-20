@@ -1381,6 +1381,36 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
                 </tr>
                 );
               })}
+              {/* TOTAL — stated once after the last period (owner rule).
+                  Planned columns sum the planned periods only, exactly as
+                  the KPI strip states. */}
+              {data.length > 0 && (
+                <tr className="border-t-2 border-primary/30 font-semibold">
+                  <td className="col-pin text-primary uppercase tracking-wider">
+                    {lang === 'ar' ? 'الإجمالي' : 'Total'}
+                  </td>
+                  {anyPlanned && (
+                    <>
+                      <td className="money money-pos">{formatMoney(varianceTotals.plannedIn, { currency: money.base })}</td>
+                      <td className="money money-neg">{formatMoney(varianceTotals.plannedOut, { currency: money.base })}</td>
+                    </>
+                  )}
+                  <td className="money money-pos">{formatMoney(totalIn, { currency: money.base })}</td>
+                  <td className="money money-neg">{formatMoney(totalOut, { currency: money.base })}</td>
+                  {anyPlanned && (
+                    <td className={cn('money',
+                      varianceTotals.netVariance > 0 ? 'money-pos'
+                      : varianceTotals.netVariance < 0 ? 'money-neg' : 'text-muted-foreground')}>
+                      {varianceTotals.netVariance > 0 ? '+' : ''}
+                      {formatMoney(varianceTotals.netVariance, { currency: money.base })}
+                    </td>
+                  )}
+                  <td className={cn('money', netFlow >= 0 ? 'money-pos' : 'money-neg')}>
+                    {formatMoney(netFlow, { currency: money.base })}
+                  </td>
+                  {canEdit && <td className="col-act" />}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

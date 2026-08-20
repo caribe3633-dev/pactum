@@ -1,1 +1,1 @@
-Each class page shows only its own approval: the Direct lens carries the Direct signature control only, the Indirect lens the Indirect one. The Total page stays as it is — both classes plus the total badge
+EVM Periods tab now has PERIODS / CUMULATIVE views (Cash Flow pattern): entry on one side, a fully automatic read-only cumulative table on the other, each ending with a TOTAL row after the last period. The Cash Flow ledger gets the same TOTAL row (planned + actual sums, variance, net)
