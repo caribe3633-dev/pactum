@@ -1165,6 +1165,27 @@ export function latestApproved(periods: EvmPeriod[]): EvmPeriod | null {
 }
 
 /**
+ * REAL WORK vs TIME PASSING — the #18 fallout.
+ *
+ * Since every period, future ones included, carries its time-derived
+ * indirect EV slice, `ev > 0` no longer means "this month was worked".
+ * Actuals evidence is TYPED performance: direct value or cost, any
+ * class AC, or a period someone acted on (non-draft). Indirect EV
+ * alone is the calendar talking — on the S-curve it drew future months
+ * as if they had been earned, sent AC diving to zero, and let the data
+ * date land on a month with nothing but its slice.
+ */
+export function hasActuals(p: EvmPeriod): boolean {
+  if (p.status !== 'draft') return true;
+  if ((p.directEv ?? 0) > 0 || (p.directAc ?? 0) > 0 || (p.indirectAc ?? 0) > 0) return true;
+  const noSplit =
+    p.directEv === undefined && p.directAc === undefined &&
+    p.indirectEv === undefined && p.indirectAc === undefined;
+  if (noSplit) return p.ev > 0 || p.ac > 0;   // legacy: ev/ac are the typed record
+  return false;
+}
+
+/**
  * The period the dashboard reports on — the DATA DATE.
  *
  * ══════════════════════════════════════════════════════════════════════
@@ -1195,7 +1216,7 @@ export function reportingPeriod(periods: EvmPeriod[], today = new Date()): EvmPe
   const i = currentPeriodIndex(periods, today);
   const from = i >= 0 ? i : periods.length - 1;
   for (let k = from; k >= 0; k--) {
-    if (periods[k].ev > 0 || periods[k].ac > 0) return periods[k];
+    if (hasActuals(periods[k])) return periods[k];
   }
   const a = latestApproved(periods);
   if (a) return a;
@@ -1237,7 +1258,9 @@ export function series(
   periods: EvmPeriod[], bac: number, eacMethod: EvmSettings['eacMethod'] = 'cpi',
 ): SeriesPoint[] {
   return periods.map(p => {
-    const started = p.ev > 0 || p.ac > 0 || p.status !== 'draft';
+    // STARTED = real work, not time passing: an indirect-only future row
+    // (its time-derived slice) must not draw EV forward or AC to zero.
+    const started = hasActuals(p);
     const cum = started ? cumulativeTo(periods, p) : undefined;
     const m = periodMetrics(p, bac, eacMethod, cum);
     return {

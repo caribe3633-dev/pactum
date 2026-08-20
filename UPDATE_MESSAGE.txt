@@ -1,1 +1,1 @@
-Cadence is now monthly, quarterly, semi-annual or annual only — weekly/biweekly removed entirely. Semi-annual periods label H1/H2, annual labels the year. Projects stored on a weekly cadence open as monthly, existing periods untouched
+S-curve data fix: future months are no longer drawn as earned. Indirect EV slices (time-derived) stopped counting as work — EV/AC lines now stop at the last really-worked month, AC no longer dives to zero, no fabricated future SPI/CPI points, and the data date skips slice-only months again
