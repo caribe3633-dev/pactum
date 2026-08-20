@@ -15,7 +15,7 @@ import {
 } from '../../lib/sourceVersions';
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ScatterChart, Scatter, ReferenceLine, ZAxis, Cell,
+  ResponsiveContainer, ScatterChart, Scatter, ReferenceArea, ReferenceLine, ZAxis, Cell,
   LineChart, Brush,
 } from 'recharts';
 import {
@@ -34,6 +34,8 @@ import {
   generateFuturePeriods, redistributePv, effectiveBounds,
   CADENCE_META, REBASELINE_CAUSES, RebaselineCause, Baseline,
   setPeriodField,
+  // ── Step 20: matrix intelligence ──
+  INDEX_TOLERANCE, withinTolerance, bubbleZ, matrixDomain,
   // ── Baseline entry + manual PV ──
   PvMethod, PV_METHODS, pvCurve, updateDraftBaseline,
   parsePvPaste, applyPvColumn, validatePv,
@@ -128,6 +130,15 @@ function fmtIndex(v: number | null): string {
   return v === null ? '—' : v.toFixed(3);
 }
 
+/** TCPI colour — INVERTED vs an index: above 1 means the remaining work
+ *  must outperform everything achieved so far just to land on BAC. */
+function tcpiTone(v: number | null): string {
+  if (v === null) return 'text-muted-foreground';
+  if (v <= 1)    return 'text-chart-4';
+  if (v <= 1.1)  return 'text-primary';
+  return 'text-chart-3';
+}
+
 /** Compact money for axes: 145M, 8.5M, 900K. */
 function shortMoney(v: number): string {
   const a = Math.abs(v);
@@ -220,6 +231,18 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
 
   const liveIndex = currentPeriodIndex(store.periods);
   const canWrite = canEdit && store.settings.allowManual;
+
+  // ── MATRIX INTELLIGENCE (Step 20) ────────────────────────────────────
+  // Trend point: last-3-period rolling indices from cumulative performance —
+  // where the project lands if the current rhythm holds.
+  const trendSpi = cum.spi3, trendCpi = cum.cpi3;
+  // Both indices inside the ±5% band: on target, no alarm.
+  const onTarget = withinTolerance(m.spi, m.cpi);
+  // Axes follow the data; the tolerance band is always fully on screen.
+  const mDom = matrixDomain(
+    [...points.map(p => p.spi), prevM?.spi ?? null, m.spi, trendSpi],
+    [...points.map(p => p.cpi), prevM?.cpi ?? null, m.cpi, trendCpi],
+  );
 
   /**
    * ══════════════════════════════════════════════════════════════════════
@@ -1008,19 +1031,26 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             <ResponsiveContainer width="100%" height={430}>
               <ScatterChart margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} />
-                <XAxis type="number" dataKey="spi" name="SPI" domain={[0.6, 1.4]}
-                       ticks={[0.6, 0.8, 1.0, 1.2, 1.4]} {...AXIS}
+                <XAxis type="number" dataKey="spi" name="SPI" domain={mDom.x}
+                       ticks={mDom.xTicks} {...AXIS}
                        label={{ value: 'SPI →', fill: '#a5a49f', fontSize: 10, position: 'insideBottomRight', offset: -6 }} />
-                <YAxis type="number" dataKey="cpi" name="CPI" domain={[0.6, 1.4]}
-                       ticks={[0.6, 0.8, 1.0, 1.2, 1.4]} {...AXIS}
+                <YAxis type="number" dataKey="cpi" name="CPI" domain={mDom.y}
+                       ticks={mDom.yTicks} {...AXIS}
                        label={{ value: 'CPI ↑', fill: '#a5a49f', fontSize: 10, position: 'insideTopLeft' }} />
-                <ZAxis type="number" dataKey="z" range={[40, 260]} />
+                <ZAxis type="number" dataKey="z" range={[40, 320]} />
+                {/* On-target zone: both indices within ±5% of 1.00. */}
+                <ReferenceArea x1={1 - INDEX_TOLERANCE} x2={1 + INDEX_TOLERANCE}
+                               y1={1 - INDEX_TOLERANCE} y2={1 + INDEX_TOLERANCE}
+                               fill="rgba(212,175,55,0.06)" stroke="rgba(212,175,55,0.18)" strokeDasharray="2 4" />
                 {/* The 1.00 crosshair defines the four quadrants. */}
                 <ReferenceLine x={1} stroke="rgba(212,175,55,0.35)" strokeDasharray="4 4" />
                 <ReferenceLine y={1} stroke="rgba(212,175,55,0.35)" strokeDasharray="4 4" />
                 <Tooltip
                   contentStyle={TT_STYLE}
-                  formatter={(v: any, n: any) => [Number(v).toFixed(3), n]}
+                  formatter={(v: any, n: any) =>
+                    n === 'vac' || n === 'eac'
+                      ? [formatMoney(Number(v), { currency: ccy }), n.toUpperCase()]
+                      : [Number(v).toFixed(3), n]}
                   labelFormatter={() => ''}
                 />
                 {/* Trail of approved history, faint. */}
@@ -1032,23 +1062,47 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   line={{ stroke: 'rgba(139,138,134,0.25)', strokeWidth: 1 }}
                   lineType="joint"
                 />
-                {/* Previous position, so movement is visible not implied. */}
+                {/* Previous position, so movement is visible not implied.
+                    Bubble size = money at stake when that period reported. */}
                 {prevM?.spi != null && prevM?.cpi != null && (
                   <Scatter
                     name={isRtl ? 'الفترة السابقة' : 'Previous'}
-                    data={[{ spi: prevM.spi, cpi: prevM.cpi, z: 130 }]}
+                    data={[{
+                      spi: prevM.spi, cpi: prevM.cpi,
+                      z: bubbleZ(prevM.vac, prevM.eac, 90, 260),
+                      vac: prevM.vac, eac: prevM.eac,
+                    }]}
                     fill="rgba(139,138,134,0.85)"
                   />
                 )}
-                {/* Current position. */}
+                {/* Current position: bubble size = money at stake (|VAC| ÷ EAC). */}
                 {m.spi !== null && m.cpi !== null && (
                   <Scatter
                     name={isRtl ? 'الموقف الحالي' : 'Current'}
-                    data={[{ spi: m.spi, cpi: m.cpi, z: 260 }]}
+                    data={[{
+                      spi: m.spi, cpi: m.cpi,
+                      z: bubbleZ(m.vac, m.eac, 120, 320),
+                      vac: m.vac, eac: m.eac,
+                    }]}
                     fill={C_EV}
                   >
                     <Cell fill={C_EV} />
                   </Scatter>
+                )}
+                {/* Projection: where the last-3-period rhythm lands.
+                    Hollow diamond — a heading, not a position. */}
+                {trendSpi !== null && trendCpi !== null && (
+                  <Scatter
+                    name={isRtl ? 'الاتجاه (٣ فترات)' : 'Trend (3p)'}
+                    data={[{ spi: trendSpi, cpi: trendCpi, z: 90 }]}
+                    shape={(props: any) => (
+                      <rect
+                        x={props.cx - 5} y={props.cy - 5} width={10} height={10}
+                        transform={`rotate(45 ${props.cx} ${props.cy})`}
+                        fill="rgba(111,155,120,0.25)" stroke={C_OK} strokeWidth={1.5}
+                      />
+                    )}
+                  />
                 )}
               </ScatterChart>
             </ResponsiveContainer>
@@ -1060,14 +1114,33 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
               <div className="text-(length:--t-label) font-medium uppercase tracking-widest text-muted-foreground mb-2">
                 {isRtl ? 'الموقف الحالي' : 'Current Position'}
               </div>
-              <div className={cn('font-serif text-lg leading-tight mb-3', qTone)}>
+              <div className={cn('font-serif text-lg leading-tight mb-2', qTone)}>
                 {isRtl ? q.ar : q.en}
               </div>
+              {/* Inside the band on both axes: no alarm, whatever the quadrant. */}
+              {onTarget && (
+                <div className="inline-block text-(length:--t-micro) tracking-widest text-primary border border-primary/30 bg-primary/[0.07] px-2 py-0.5 mb-3 number-ltr">
+                  {isRtl ? 'على الهدف · ضمن السماحية ±٥٪' : 'ON TARGET · WITHIN ±5%'}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-px bg-white/5">
                 <div className="bg-black/30 p-3">
                   <div className="text-(length:--t-label) font-medium uppercase text-muted-foreground">SPI</div>
                   <div className={cn('font-mono text-xl number-ltr', indexTone(m.spi))}>{fmtIndex(m.spi)}</div>
                   <Movement now={m.spi} was={prevM?.spi ?? null} />
+                  {/* Delay in calendar days, beside the schedule index. */}
+                  <div className={cn('text-(length:--t-data) font-mono number-ltr mt-1',
+                      dates.slipDays > 60 ? 'text-chart-3'
+                    : dates.slipDays > 14 ? 'text-chart-5'
+                    : dates.slipDays < 0  ? 'text-chart-4'
+                    : 'text-muted-foreground')}>
+                    {isRtl ? 'الإنجاز المتوقع' : 'Forecast finish'}:{' '}
+                    {dates.slipDays > 0
+                      ? (isRtl ? `${dates.slipDays} يوم تأخير` : `${dates.slipDays}d late`)
+                      : dates.slipDays < 0
+                        ? (isRtl ? `${-dates.slipDays} يوم مبكر` : `${-dates.slipDays}d early`)
+                        : (isRtl ? 'على الأساس' : 'on baseline')}
+                  </div>
                 </div>
                 <div className="bg-black/30 p-3">
                   <div className="text-(length:--t-label) font-medium uppercase text-muted-foreground">CPI</div>
@@ -1075,7 +1148,39 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   <Movement now={m.cpi} was={prevM?.cpi ?? null} />
                 </div>
               </div>
-              {prevQuadrant && prevQuadrant.key !== quadrant.key && (
+              {/* The money the position implies — TCPI to finish on BAC,
+                  and the forecast it feeds. */}
+              <div className="grid grid-cols-3 gap-px bg-white/5 mt-px">
+                <div className="bg-black/30 p-3">
+                  <div className="text-(length:--t-label) font-medium uppercase text-muted-foreground">TCPI</div>
+                  <div className={cn('font-mono text-lg number-ltr', tcpiTone(m.tcpi))}>{fmtIndex(m.tcpi)}</div>
+                  <div className="text-(length:--t-micro) text-muted-foreground mt-1">
+                    {isRtl ? 'كفاءة مطلوبة للعمل المتبقي' : 'needed on remaining work'}
+                  </div>
+                </div>
+                <div className="bg-black/30 p-3">
+                  <div className="text-(length:--t-label) font-medium uppercase text-muted-foreground">EAC</div>
+                  <div className="font-mono text-(length:--t-data) number-ltr">
+                    {formatMoney(m.eac, { currency: ccy })}
+                  </div>
+                </div>
+                <div className="bg-black/30 p-3">
+                  <div className="text-(length:--t-label) font-medium uppercase text-muted-foreground">VAC</div>
+                  <div className={cn('font-mono text-(length:--t-data) number-ltr', varianceTone(m.vac))}>
+                    {formatMoney(m.vac, { currency: ccy })}
+                  </div>
+                </div>
+              </div>
+              {trendSpi !== null && trendCpi !== null && (
+                <div className="text-(length:--t-second) text-muted-foreground mt-3">
+                  {isRtl ? 'اتجاه آخر ٣ فترات' : 'Last-3-period trend'}:{' '}
+                  <span className="font-mono number-ltr">
+                    SPI {fmtIndex(trendSpi)} · CPI {fmtIndex(trendCpi)}
+                  </span>
+                </div>
+              )}
+              {prevQuadrant && prevQuadrant.key !== quadrant.key &&
+               !(onTarget && withinTolerance(prevM?.spi ?? null, prevM?.cpi ?? null)) && (
                 <p className="text-(length:--t-second) text-muted-foreground mt-3 border-s-2 border-primary/30 ps-2">
                   {isRtl ? 'انتقل من' : 'Moved from'}{' '}
                   <span className="text-white/70">{isRtl ? prevQuadrant.ar : prevQuadrant.en}</span>
@@ -1097,6 +1202,11 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <div className={cn('text-xs', x.on ? x.c : 'text-white/40')}>{x.d}</div>
               </div>
             ))}
+            <p className="text-(length:--t-second) text-muted-foreground italic">
+              {isRtl
+                ? 'حجم الفقاعة = المال المعرَّض للخطر (|VAC| ÷ EAC) · المنطقة الذهبية = على الهدف ±٥٪ ◆ المعيّن الأخضر = اتجاه آخر ٣ فترات'
+                : 'Bubble size = money at stake (|VAC| ÷ EAC) · gold zone = on target ±5% · green diamond ◆ = last-3-period trend.'}
+            </p>
           </div>
         </div>
       )}

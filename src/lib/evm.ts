@@ -1270,6 +1270,70 @@ export function healthScore(spi: number | null, cpi: number | null): number | nu
   return Math.round((a + b) / 2);
 }
 
+// ── Matrix intelligence: tolerance, money at stake, adaptive axes ───────
+
+/**
+ * Commercial tolerance around the 1.00 target. An index inside this band
+ * is ON TARGET — reading 0.99 as "behind schedule" cries wolf on a project
+ * that is doing its job. The quadrant split stays at 1.00 (that is where
+ * the dot geometrically sits); the band governs whether it is ALARMING.
+ */
+export const INDEX_TOLERANCE = 0.05;
+
+/** True when BOTH indices sit inside the ±tolerance band of 1.00. */
+export function withinTolerance(
+  spi: number | null, cpi: number | null, tol = INDEX_TOLERANCE,
+): boolean {
+  const ok = (v: number | null) => v !== null && Math.abs(v - 1) <= tol + 1e-9;
+  return ok(spi) && ok(cpi);
+}
+
+/**
+ * Bubble size for the performance matrix: MONEY AT STAKE, not importance.
+ * ratio = |VAC| ÷ EAC — the share of the forecast the variance represents.
+ * A 2M overrun on a 200M job is a 1% story; the same 2M on a 10M job is
+ * the whole story. Clamped at MAX_BUBBLE_RATIO so one wild period cannot
+ * swallow the chart, then mapped linearly onto [min, max].
+ */
+export const MAX_BUBBLE_RATIO = 0.25;
+export function bubbleZ(
+  vac: number | null, eac: number | null, min = 80, max = 320,
+): number {
+  if (vac === null || eac === null || eac <= 0) return min;
+  const r = Math.min(MAX_BUBBLE_RATIO, Math.abs(vac) / eac);
+  return Math.round(min + (r / MAX_BUBBLE_RATIO) * (max - min));
+}
+
+export interface MatrixDomain {
+  x: [number, number]; y: [number, number];
+  xTicks: number[]; yTicks: number[];
+}
+
+/**
+ * Adaptive axis window for the matrix. The old fixed [0.6, 1.4] domain
+ * clipped real positions off the chart — a CPI of 1.8 is a fact and
+ * deserves a dot. The window always shows the full tolerance band and at
+ * least ±MIN_HALF around 1.00, then expands to whatever the data demands.
+ */
+const MIN_HALF = 0.3;
+export function matrixDomain(xs: (number | null)[], ys: (number | null)[]): MatrixDomain {
+  const axis = (vals: (number | null)[]): [number, number] => {
+    const v = vals.filter((n): n is number => n !== null && Number.isFinite(n));
+    v.push(1, 1 - INDEX_TOLERANCE, 1 + INDEX_TOLERANCE);
+    const lo = Math.min(...v), hi = Math.max(...v);
+    const pad = Math.max(0.1, (hi - lo) * 0.15);
+    const snap = (n: number) => Math.round(n * 20) / 20;
+    return [
+      Math.min(snap(lo - pad), 1 - MIN_HALF),
+      Math.max(snap(hi + pad), 1 + MIN_HALF),
+    ];
+  };
+  const ticks = ([lo, hi]: [number, number]) =>
+    Array.from({ length: 5 }, (_, i) => Math.round((lo + (i * (hi - lo)) / 4) * 100) / 100);
+  const x = axis(xs), y = axis(ys);
+  return { x, y, xTicks: ticks(x), yTicks: ticks(y) };
+}
+
 // ── Workflow ───────────────────────────────────────────────────────────
 
 /**
