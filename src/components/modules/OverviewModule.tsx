@@ -7,6 +7,10 @@ import { formatDate, toInputDate } from '../../lib/dateFormat';
 import { Activity, Clock, FileWarning, Wallet, Landmark, RefreshCw } from 'lucide-react';
 import { EditableNumber, EditableDate } from '../EditableCell';
 import { computeApprovedEOT, syncDelayRegister, computeLd, computeProgramme } from '../../lib/delayCalculations';
+// PROGRESS IS EARNED, NOT TYPED (owner decision, option A): the Overview
+// progress card reads EV ÷ BAC from the same EVM engine the dashboard
+// runs — one number everywhere, no manual field that silently sits at 0.
+import { snapshot as evmSnapshot, readSyncedEvm } from '../../lib/evm';
 import ReportButton from '../reporting/ReportButton';
 // SPRINT 1 · TASK 1 — commercial totals must never add two currencies.
 // The rows were already converted at save time; the contract base was not.
@@ -176,6 +180,28 @@ export default function OverviewModule({
   const { updateProject }  = useProjects();
 
   const [computed, setComputed] = useState<Computed>(() => computeFromStorage(project));
+
+  /**
+   * PROGRESS = EV ÷ BAC, live from the EVM engine (owner decision, A).
+   * Same engine, same basis as the dashboard's % bars — the card can
+   * never again disagree with the earned value it summarizes. Null when
+   * there is no budget to measure against (no approved baseline and no
+   * derivable contract): absence prints an em dash, never a confident 0%.
+   */
+  const evmProgress = useMemo(() => {
+    try {
+      const snap = evmSnapshot(project as any, readSyncedEvm(project as any));
+      return {
+        pct: snap.bac > 0 ? snap.m.ev / snap.bac : null,
+        period: snap.period?.label ?? '',
+      };
+    } catch {
+      return { pct: null, period: '' };
+    }
+  }, [project]);
+  /** The percent the whole screen quotes — earned when measurable, the
+   *  stored record otherwise (legacy), so summaries never blank out. */
+  const progressPct = evmProgress.pct ?? project.progress;
   const [syncing,  setSyncing]  = useState(false);
   const [synced,   setSynced]   = useState(false);
 
@@ -245,7 +271,7 @@ export default function OverviewModule({
   const netCash = computed.totalCashReceived - computed.totalCashDisbursed;
 
   const summaryEn =
-    `Project is at ${formatPercent(project.progress)} physical completion with a net delay of ` +
+    `Project is at ${formatPercent(progressPct)} physical completion with a net delay of ` +
     `${computed.currentDelay} days` +
     (computed.totalApprovedEOT > 0
       ? ` (${computed.totalApprovedEOT} days of approved EOT have been applied)`
@@ -261,7 +287,7 @@ export default function OverviewModule({
     `. Net cash position: ${formatMoney(netCash, { currency: ccy })}.`;
 
   const summaryAr =
-    `المشروع عند نسبة إنجاز فعلية ${formatPercent(project.progress)} مع تأخير صافٍ ` +
+    `المشروع عند نسبة إنجاز فعلية ${formatPercent(progressPct)} مع تأخير صافٍ ` +
     `${computed.currentDelay} يوماً` +
     (computed.totalApprovedEOT > 0
       ? ` (تم تطبيق ${computed.totalApprovedEOT} يوم تمديد وقت معتمد)`
@@ -478,18 +504,27 @@ export default function OverviewModule({
 
       {/* Status chips — Progress & Current Delay */}
       <div className="flex gap-4 flex-wrap">
-        {/* Actual Progress */}
+        {/* Actual Progress — EARNED, NOT TYPED (owner decision, A):
+            EV ÷ BAC from the EVM engine, the same number the dashboard's
+            % bars print. The old manual field sat at 0% forever because
+            nothing ever wrote it. */}
         <div className="ds-card ds-card-key !flex-row items-center justify-between flex-1 min-w-[180px]">
           <div className="!mt-0">
             <p className="kpi-k">{t.actualProgress}</p>
             <p className="t-metric kpi-v-ok">
-              <EditableNumber
-                value={Math.round(project.progress * 1000) / 10}
-                onSave={(v) => patch('progress', Math.min(1, Math.max(0, v / 100)))}
-                canEdit={canEdit}
-                display={formatPercent(project.progress)}
-                className="t-metric kpi-v-ok"
-              />
+              {evmProgress.pct === null ? (
+                <span title={lang === 'ar'
+                  ? 'لا يوجد BAC متاح — لا توجد نسبة تُقاس'
+                  : 'No BAC available — nothing measurable yet'}>
+                  —
+                </span>
+              ) : (
+                formatPercent(evmProgress.pct)
+              )}
+            </p>
+            <p className="kpi-sub text-muted-foreground/70">
+              {lang === 'ar' ? 'من القيمة المكتسبة — EV ÷ BAC' : 'Earned — EV ÷ BAC'}
+              {evmProgress.period && ` · ${evmProgress.period}`}
             </p>
           </div>
           <Activity className="text-chart-4 opacity-40 w-8 h-8 flex-shrink-0 !mt-0" />
