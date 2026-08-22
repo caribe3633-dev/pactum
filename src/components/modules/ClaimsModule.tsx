@@ -756,7 +756,19 @@ export default function ClaimsModule({ project, canEdit = true }: { project: Pro
                                       {isRtl ? 'يدخل الموازنة و BAC' : 'Enters Budget AND BAC'}
                                     </span>
                                   </div>
-                                                                    {/* ── TWO LINKS, ONE PER CLASS (owner rule) ──
+                                                                                                      <div className="field">
+                                    <label className="field-label">
+                                      {isRtl ? 'أثر التكلفة غير المباشرة' : 'Indirect Cost Impact'}
+                                    </label>
+                                    <input className="field-input font-mono number-ltr" type="number" dir="ltr"
+                                      placeholder={isRtl ? 'غير مُقيَّم' : 'Not Assessed'}
+                                      value={costDraft.indirect} disabled={!canEdit}
+                                      onChange={e => setCostDraft({ ...costDraft, indirect: e.target.value })} />
+                                    <span className="text-(length:--t-micro) text-muted-foreground">
+                                      {isRtl ? 'يدخل الموازنة فقط — لا يدخل BAC' : 'Enters Budget only — NOT BAC'}
+                                    </span>
+                                  </div>
+{/* ── TWO LINKS, ONE PER CLASS (owner rule) ──
                                       The direct and indirect portions are
                                       recognized separately: each names the
                                       budget line of ITS OWN class that already
