@@ -102,6 +102,24 @@ function str(v: unknown): string {
  * Anything that is not exactly 'direct' or 'indirect' is UNCLASSIFIED.
  * A typo, a stale value, a number, `null` — none of them become a guess.
  */
+/**
+ * Category names of ONE cost class — the options for the per-class budget
+ * link in a cost assessment (owner rule: the direct portion links to a
+ * DIRECT line, the indirect portion to an INDIRECT line, so the baseline
+ * rebuild recognizes each part against the right class).
+ * Unclassified lines appear in NEITHER list: classify them in the Budget
+ * screen — nothing is guessed here.
+ */
+export function budgetCategoriesByClass(rows: unknown[], cls: 'direct' | 'indirect'): string[] {
+  const seen = new Set<string>();
+  (Array.isArray(rows) ? rows : []).forEach(r => {
+    if (costTypeOf(r as BudgetLineLike) !== cls) return;
+    const c = typeof (r as any)?.category === 'string' ? (r as any).category.trim() : '';
+    if (c) seen.add(c);
+  });
+  return [...seen];
+}
+
 export function costTypeOf(line: BudgetLineLike): CostType {
   const t = str(line?.costType).trim().toLowerCase();
   if (t === 'direct') return 'direct';

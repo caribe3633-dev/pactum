@@ -10,7 +10,9 @@ exports[`Cost bearing rows (golden) > costOf: قراءة كتلة التكلفة
   "costApprovedAt": undefined,
   "costApprovedBy": undefined,
   "costNote": undefined,
+  "directBudgetRef": undefined,
   "directImpact": 0,
+  "indirectBudgetRef": undefined,
   "indirectImpact": 0,
 }
 `;

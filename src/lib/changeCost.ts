@@ -80,6 +80,22 @@ export interface CostAssessment {
    * Cost impact that is part of the works — labour, materials, plant,
    * subcontract. Enters the direct budget and, once baselined, BAC.
    */
+  /**
+   * ════════════════════════════════════════════════════════════════════
+   * TWO LINKS, ONE PER COST CLASS (owner rule).
+   *
+   * The direct and indirect portions are recognized SEPARATELY: each
+   * names the budget line of ITS OWN class that already carries it.
+   * Empty = that class is not in the register, so the next baseline
+   * adds that portion on top of it.
+   *
+   * LEGACY: a single `budgetLineRef` written before this split counts
+   * for BOTH classes, so an old linked row keeps its exact behaviour
+   * (nothing added). The per-class refs take precedence when present.
+   * ════════════════════════════════════════════════════════════════════
+   */
+  directBudgetRef?: string;
+  indirectBudgetRef?: string;
   directImpact: number;
   /**
    * Site overhead, management, insurance, preliminaries. Enters the
@@ -236,6 +252,8 @@ export function costOf(row: CostBearingRow): CostAssessment | null {
   const state = str(o.costApproval).toLowerCase();
   return {
     budgetLineRef: o.budgetLineRef ? str(o.budgetLineRef) : undefined,
+    directBudgetRef: o.directBudgetRef ? str(o.directBudgetRef) : undefined,
+    indirectBudgetRef: o.indirectBudgetRef ? str(o.indirectBudgetRef) : undefined,
     directImpact: num(o.directImpact),
     indirectImpact: num(o.indirectImpact),
     assessed: o.assessed === true,
@@ -446,10 +464,12 @@ export function summariseCosts(rows: CostBearingRow[] | null | undefined): CostS
 export function assessCost<T extends CostBearingRow>(
   row: T, directImpact: number, indirectImpact: number,
   by: string, at: string = new Date().toISOString(),
-  budgetLineRef?: string,
+  budgetLineRef?: string, directBudgetRef?: string, indirectBudgetRef?: string,
 ): T {
   const prev = costOf(row);
   const ref = (budgetLineRef !== undefined ? str(budgetLineRef) : (prev?.budgetLineRef ?? '')).trim();
+  const dRef = (directBudgetRef !== undefined ? str(directBudgetRef) : (prev?.directBudgetRef ?? '')).trim();
+  const iRef = (indirectBudgetRef !== undefined ? str(indirectBudgetRef) : (prev?.indirectBudgetRef ?? '')).trim();
   // The LINK is part of the assessment, so changing it re-opens approval
   // exactly as changing a figure does. Approving "8M, already in
   // Earthworks" and then silently re-pointing it at "not in the budget"
@@ -457,9 +477,13 @@ export function assessCost<T extends CostBearingRow>(
   const changed = !prev
     || prev.directImpact !== num(directImpact)
     || prev.indirectImpact !== num(indirectImpact)
-    || (prev.budgetLineRef ?? '') !== ref;
+    || (prev.budgetLineRef ?? '') !== ref
+    || (prev.directBudgetRef ?? '') !== dRef
+    || (prev.indirectBudgetRef ?? '') !== iRef;
   const cost: CostAssessment = {
     budgetLineRef: ref || undefined,
+    directBudgetRef: dRef || undefined,
+    indirectBudgetRef: iRef || undefined,
     directImpact: num(directImpact),
     indirectImpact: num(indirectImpact),
     assessed: true,
@@ -493,6 +517,22 @@ export function budgetLineRefOf(row: CostBearingRow): string {
 }
 
 /**
+ * The DIRECT portion's budget line, or '' when that class is unlinked.
+ * A legacy single `budgetLineRef` counts as linked to BOTH classes, so
+ * an old row's behaviour is unchanged by the split.
+ */
+export function directBudgetRefOf(row: CostBearingRow): string {
+  const c = costOf(row);
+  return (c?.directBudgetRef ?? c?.budgetLineRef ?? '').trim();
+}
+
+/** The INDIRECT portion's budget line, same rules as the direct one. */
+export function indirectBudgetRefOf(row: CostBearingRow): string {
+  const c = costOf(row);
+  return (c?.indirectBudgetRef ?? c?.budgetLineRef ?? '').trim();
+}
+
+/**
  * The cost this item ADDS to the budget on top of the register.
  *
  * Zero when linked (the register already holds it) and zero unless the
@@ -501,9 +541,13 @@ export function budgetLineRefOf(row: CostBearingRow): string {
  * place the double-count question is answered.
  */
 export function additiveBudgetImpact(row: CostBearingRow): { direct: number; indirect: number } {
-  if (isBudgetLinked(row)) return { direct: 0, indirect: 0 };
+  // PER CLASS (owner rule): a linked class adds nothing, an unlinked
+  // class is added on top — the two halves state it independently.
+  const dLinked = !!directBudgetRefOf(row);
+  const iLinked = !!indirectBudgetRefOf(row);
   const b = budgetImpact(row);
-  return { direct: b.direct, indirect: b.indirect };
+  if (dLinked && iLinked) return { direct: 0, indirect: 0 };
+  return { direct: dLinked ? 0 : b.direct, indirect: iLinked ? 0 : b.indirect };
 }
 
 /**

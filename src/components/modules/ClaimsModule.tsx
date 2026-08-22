@@ -38,6 +38,8 @@ import {
   costState, assessmentStatusLabel, approvalStatusLabel, isBaselineEligible,
   type CostAssessment, type CostStage,
 } from '../../lib/changeCost';
+// Per-class budget line lists — the two links (direct/indirect).
+import { budgetCategoriesByClass } from '../../lib/costModel';
 import { useAuth } from '../../lib/store';
 /**
  * SOURCE VERSIONING. This register is one of the five a Baseline Package
@@ -167,7 +169,7 @@ export default function ClaimsModule({ project, canEdit = true }: { project: Pro
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   /** Which row's cost panel is open. Independent of the delays panel. */
   const [costRow, setCostRow] = useState<number | null>(null);
-  const [costDraft, setCostDraft] = useState({ direct: '', indirect: '', note: '', budgetLineRef: '' });
+  const [costDraft, setCostDraft] = useState({ direct: '', indirect: '', note: '', directRef: '', indirectRef: '' });
   const { user } = useAuth();
   const isRtl = lang === 'ar';
 
@@ -219,7 +221,8 @@ export default function ClaimsModule({ project, canEdit = true }: { project: Pro
       direct: c && c.assessed ? String(c.directImpact) : '',
       indirect: c && c.assessed ? String(c.indirectImpact) : '',
       note: '',
-      budgetLineRef: c ? (c.budgetLineRef || '') : '',
+      directRef: c ? (c.directBudgetRef ?? c.budgetLineRef ?? '') : '',
+      indirectRef: c ? (c.indirectBudgetRef ?? c.budgetLineRef ?? '') : '',
     });
     setCostRow(i);
   };
@@ -231,7 +234,8 @@ export default function ClaimsModule({ project, canEdit = true }: { project: Pro
     applyToRow(i, r => assessCost(r,
       Number(costDraft.direct) || 0,
       Number(costDraft.indirect) || 0,
-      user?.username || 'unknown', undefined, costDraft.budgetLineRef));
+      user?.username || 'unknown', undefined, undefined,
+      costDraft.directRef, costDraft.indirectRef));
   };
 
   const doApproveCost = (i: number) => applyToRow(i, r => approveCost(r, user?.username || 'unknown'));
@@ -251,17 +255,17 @@ export default function ClaimsModule({ project, canEdit = true }: { project: Pro
    * option here. Category name is the key because a budget row has no id,
    * and inventing one would mean rewriting every stored budget record.
    */
-  const budgetCategories = useMemo(() => {
+  const budgetLines = useMemo(() => {
     try {
       const raw = JSON.parse(localStorage.getItem(`pactum-budget-${project.id}`) || '[]');
-      if (!Array.isArray(raw)) return [] as string[];
-      const seen = new Set<string>();
-      raw.forEach((r: any) => {
-        const c = typeof r?.category === 'string' ? r.category.trim() : '';
-        if (c) seen.add(c);
-      });
-      return [...seen];
-    } catch { return [] as string[]; }
+      // PER CLASS (owner rule): the direct link lists direct-classified
+      // lines only, the indirect link indirect-classified only — so the
+      // cost is recognized against the right class of the budget.
+      return {
+        direct: budgetCategoriesByClass(raw, 'direct'),
+        indirect: budgetCategoriesByClass(raw, 'indirect'),
+      };
+    } catch { return { direct: [] as string[], indirect: [] as string[] }; }
   }, [project.id, costRow]);
 
   const [isAdding, setIsAdding] = useState(false);
@@ -752,52 +756,64 @@ export default function ClaimsModule({ project, canEdit = true }: { project: Pro
                                       {isRtl ? 'يدخل الموازنة و BAC' : 'Enters Budget AND BAC'}
                                     </span>
                                   </div>
+                                                                    {/* ── TWO LINKS, ONE PER CLASS (owner rule) ──
+                                      The direct and indirect portions are
+                                      recognized separately: each names the
+                                      budget line of ITS OWN class that already
+                                      carries it. A linked class adds nothing;
+                                      an unlinked class is added on top by the
+                                      next baseline. Nothing is inferred. */}
                                   <div className="field">
                                     <label className="field-label">
-                                      {isRtl ? 'أثر التكلفة غير المباشرة' : 'Indirect Cost Impact'}
-                                    </label>
-                                    <input className="field-input font-mono number-ltr" type="number" dir="ltr"
-                                      placeholder={isRtl ? 'غير مُقيَّم' : 'Not Assessed'}
-                                      value={costDraft.indirect} disabled={!canEdit}
-                                      onChange={e => setCostDraft({ ...costDraft, indirect: e.target.value })} />
-                                    <span className="text-(length:--t-micro) text-muted-foreground">
-                                      {isRtl ? 'يدخل الموازنة فقط — لا يدخل BAC' : 'Enters Budget only — NOT BAC'}
-                                    </span>
-                                  </div>
-                                  {/* ── Q1=C · WHICH BUDGET LINE ALREADY CARRIES THIS? ──
-                                      The one question that decides whether a
-                                      baseline adds this money or not. Left
-                                      unlinked, the cost is outside the register
-                                      and the next baseline adds it on top;
-                                      linked, the register already holds it and
-                                      the baseline adds nothing. Nothing is
-                                      inferred — the assessor states it. */}
-                                  <div className="field">
-                                    <label className="field-label">
-                                      {isRtl ? 'بند الموازنة' : 'Budget Line'}
+                                      {isRtl ? 'ربط المباشر ببند الموازنة' : 'Direct — Budget Line Link'}
                                     </label>
                                     <select
                                       className="field-input"
-                                      value={costDraft.budgetLineRef}
+                                      value={costDraft.directRef}
                                       disabled={!canEdit}
-                                      onChange={e => setCostDraft({ ...costDraft, budgetLineRef: e.target.value })}
+                                      onChange={e => setCostDraft({ ...costDraft, directRef: e.target.value })}
                                     >
                                       <option value="">
-                                        {isRtl ? 'غير مرتبط — يُضاف فوق الموازنة' : 'Not linked — adds on top of Budget'}
+                                        {isRtl ? 'غير مرتبط — يُضاف فوق المباشر' : 'Not linked — adds to Direct on top'}
                                       </option>
-                                      {budgetCategories.map(cat => (
+                                      {budgetLines.direct.map(cat => (
                                         <option key={cat} value={cat}>{cat}</option>
                                       ))}
                                     </select>
                                     <span className="text-(length:--t-micro) text-muted-foreground">
-                                      {costDraft.budgetLineRef
-                                        ? (isRtl ? 'الموازنة تحمل هذه التكلفة — لن تُضاف مرة أخرى'
-                                                 : 'Budget already carries this — will NOT be added again')
-                                        : (isRtl ? 'سيُضاف إلى الموازنة عند اعتماد خط الأساس التالي'
-                                                 : 'Will be ADDED to Budget by the next baseline')}
+                                      {costDraft.directRef
+                                        ? (isRtl ? 'بند مباشر يحملها — لن تُضاف مرة أخرى'
+                                                 : 'A direct line carries it — will NOT be added again')
+                                        : (isRtl ? 'سيُضاف إلى المباشر عند خط الأساس التالي'
+                                                 : 'Will be ADDED to Direct by the next baseline')}
                                     </span>
                                   </div>
                                   <div className="field">
+                                    <label className="field-label">
+                                      {isRtl ? 'ربط غير المباشر ببند الموازنة' : 'Indirect — Budget Line Link'}
+                                    </label>
+                                    <select
+                                      className="field-input"
+                                      value={costDraft.indirectRef}
+                                      disabled={!canEdit}
+                                      onChange={e => setCostDraft({ ...costDraft, indirectRef: e.target.value })}
+                                    >
+                                      <option value="">
+                                        {isRtl ? 'غير مرتبط — يُضاف فوق غير المباشر' : 'Not linked — adds to Indirect on top'}
+                                      </option>
+                                      {budgetLines.indirect.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                      ))}
+                                    </select>
+                                    <span className="text-(length:--t-micro) text-muted-foreground">
+                                      {costDraft.indirectRef
+                                        ? (isRtl ? 'بند غير مباشر يحملها — لن تُضاف مرة أخرى'
+                                                 : 'An indirect line carries it — will NOT be added again')
+                                        : (isRtl ? 'سيُضاف إلى غير المباشر عند خط الأساس التالي'
+                                                 : 'Will be ADDED to Indirect by the next baseline')}
+                                    </span>
+                                  </div>
+<div className="field">
                                     <label className="field-label">
                                       {isRtl ? 'إجمالي أثر التكلفة' : 'Total Cost Impact'}
                                     </label>

@@ -62,7 +62,8 @@
 import { deriveBudget as __deriveBudgetRaw, type BudgetLineLike } from './costModel';
 import {
   isBaselineEligible as __isEligible, costOf as __costOf,
-  budgetLineRefOf as __refOf, type CostBearingRow,
+  budgetLineRefOf as __refOf, directBudgetRefOf as __directRefOf,
+  indirectBudgetRefOf as __indirectRefOf, type CostBearingRow,
 } from './changeCost';
 // STEP 10 — the authoritative gate, called not re-implemented. The gate
 // imports back from here with `import type`, which is erased at build
@@ -2078,8 +2079,18 @@ export interface IncludedItem {
    * Q1=C: linked items add nothing, because the register holds the money.
    */
   budgetLineRef: string;
+  /**
+   * TWO LINKS, ONE PER CLASS (owner rule). Each portion names the budget
+   * line of ITS OWN class that already carries it; '' when that class is
+   * outside the register and the next baseline adds it on top.
+   */
+  directBudgetRef: string;
+  indirectBudgetRef: string;
   /** True when this item's cost was ADDED to the register total. */
   additive: boolean;
+  /** Per-class versions of `additive` — the recognition is per class. */
+  directAdditive: boolean;
+  indirectAdditive: boolean;
   costApprovedAt: string;
 }
 
@@ -2134,7 +2145,8 @@ function __eligible(r: unknown): boolean {
 /** Reads one row's identity and assessed figures. Invents nothing. */
 function __readItem(r: unknown): {
   ref: string; direct: number; indirect: number;
-  budgetLineRef: string; approvedAt: string; assessed: boolean;
+  budgetLineRef: string; directRef: string; indirectRef: string;
+  approvedAt: string; assessed: boolean;
 } {
   const row = r as CostBearingRow;
   const c = __costOf(row);
@@ -2144,6 +2156,9 @@ function __readItem(r: unknown): {
     direct: c && c.assessed ? c.directImpact : 0,
     indirect: c && c.assessed ? c.indirectImpact : 0,
     budgetLineRef: __refOf(row),
+    // Per-class links — legacy single ref counts for both classes.
+    directRef: __directRefOf(row),
+    indirectRef: __indirectRefOf(row),
     approvedAt: c?.costApprovedAt ?? '',
     assessed: !!(c && c.assessed),
   };
@@ -2171,7 +2186,8 @@ export function rebuildPackage(input: RebuildInput): RebuildResult {
     eligible: (r: unknown) => boolean,
     read: (r: unknown) => {
       ref: string; direct: number; indirect: number;
-      budgetLineRef: string; approvedAt: string; assessed: boolean;
+      budgetLineRef: string; directRef: string; indirectRef: string;
+      approvedAt: string; assessed: boolean;
     },
   ) => {
     (Array.isArray(rows) ? rows : []).forEach(r => {
@@ -2194,7 +2210,9 @@ export function rebuildPackage(input: RebuildInput): RebuildResult {
               ref: info.ref, kind, basis: 'carried-forward',
               directImpact: info.direct, indirectImpact: info.indirect,
               budgetLineRef: info.budgetLineRef,
+              directBudgetRef: info.directRef, indirectBudgetRef: info.indirectRef,
               additive: false,          // already counted by the prior version
+              directAdditive: false, indirectAdditive: false,
               costApprovedAt: approvedOn,
             });
           } else {
@@ -2203,15 +2221,20 @@ export function rebuildPackage(input: RebuildInput): RebuildResult {
           }
           return;
         }
+        // Q1=C, PER CLASS — only an UNLINKED, newly approved portion adds
+        // money. A linked one is already in the register; a carried-forward
+        // one was already counted when its own version was approved. The
+        // direct and indirect halves state it independently (owner rule).
+        const directAdditive = !info.directRef && !wasIncluded;
+        const indirectAdditive = !info.indirectRef && !wasIncluded;
         included.push({
           ref: info.ref, kind,
           basis: wasIncluded ? 'carried-forward' : 'newly-approved',
           directImpact: info.direct, indirectImpact: info.indirect,
           budgetLineRef: info.budgetLineRef,
-          // Q1=C — only an UNLINKED, newly approved item adds money. A
-          // linked one is already in the register; a carried-forward one
-          // was already counted when its own version was approved.
-          additive: !info.budgetLineRef && !wasIncluded,
+          directBudgetRef: info.directRef, indirectBudgetRef: info.indirectRef,
+          additive: directAdditive || indirectAdditive,
+          directAdditive, indirectAdditive,
           costApprovedAt: approvedOn,
         });
         return;
@@ -2227,7 +2250,9 @@ export function rebuildPackage(input: RebuildInput): RebuildResult {
           directImpact: info.assessed ? info.direct : 0,
           indirectImpact: info.assessed ? info.indirect : 0,
           budgetLineRef: info.budgetLineRef,
+          directBudgetRef: info.directRef, indirectBudgetRef: info.indirectRef,
           additive: false,
+          directAdditive: false, indirectAdditive: false,
           costApprovedAt: iso10(info.approvedAt),
         });
       } else {
@@ -2253,10 +2278,12 @@ export function rebuildPackage(input: RebuildInput): RebuildResult {
   };
 
   // ── Q1=C: add only what the register does not already carry ──────────
+  // Per class (owner rule): each half adds only when ITS OWN link is
+  // empty and it was not already counted by the prior version.
   const additiveDirect = included
-    .filter(i => i.additive).reduce((a, i) => a + i.directImpact, 0);
+    .reduce((a, i) => a + (i.directAdditive ? i.directImpact : 0), 0);
   const additiveIndirect = included
-    .filter(i => i.additive).reduce((a, i) => a + i.indirectImpact, 0);
+    .reduce((a, i) => a + (i.indirectAdditive ? i.indirectImpact : 0), 0);
 
   const direct = reg.direct + additiveDirect;
   const indirect = reg.indirect + additiveIndirect;
