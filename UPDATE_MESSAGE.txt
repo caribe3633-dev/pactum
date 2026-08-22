@@ -1,1 +1,1 @@
-Trend tab EAC/VAC fixed: every row (table + forecast charts) now answers from its own cumulative performance with the official EAC method and today's BAC — same formula as the dashboard headline — instead of the approval-time frozen forecast that mixed methods and baselines across rows
+EVM tabs consolidated to five: Dashboard (now carrying the S-curve chart with NOW marker + zoom brush, plus all the Trend content — indices, variances, forecast trend and approved history), Matrix, Periods, Forecast, Baseline. The S-Curve and Trend tabs are gone

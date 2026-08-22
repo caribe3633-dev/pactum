@@ -89,16 +89,15 @@ const TT_STYLE: React.CSSProperties = {
   fontSize: 11,
 };
 
-// The five original tabs are preserved exactly. Forecast and Baseline are
-// additive — the brief forbids removing tabs, not adding them.
-type Tab = 'dashboard' | 'scurve' | 'matrix' | 'periods' | 'trend' | 'forecast' | 'baseline';
+// The tab set after the owner's consolidation: the S-Curve chart lives
+// in the Dashboard and the Trend content moved into the Dashboard too —
+// one reporting surface, no duplicated charts.
+type Tab = 'dashboard' | 'matrix' | 'periods' | 'forecast' | 'baseline';
 
 const TABS: { id: Tab; icon: any; en: string; ar: string }[] = [
   { id: 'dashboard', icon: Activity,       en: 'Dashboard',   ar: 'اللوحة' },
-  { id: 'scurve',    icon: TrendingUp,     en: 'S-Curve',     ar: 'منحنى S' },
   { id: 'matrix',    icon: Grid3x3,        en: 'Matrix',      ar: 'المصفوفة' },
   { id: 'periods',   icon: ClipboardCheck, en: 'Periods',     ar: 'الفترات' },
-  { id: 'trend',     icon: Activity,       en: 'Trend',       ar: 'الاتجاه' },
   { id: 'forecast',  icon: TrendingUp,     en: 'Forecast',    ar: 'التوقعات' },
   { id: 'baseline',  icon: Layers,         en: 'Baseline',    ar: 'الأساس' },
 ];
@@ -995,63 +994,131 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <Line type="monotone" dataKey="pv" name="PV" stroke={C_PV} strokeWidth={1.5} dot={false} />
                 <Line type="monotone" dataKey="ev" name="EV" stroke={C_EV} strokeWidth={2} dot={false} connectNulls={false} />
                 <Line type="monotone" dataKey="ac" name="AC" stroke={C_AC} strokeWidth={1.5} dot={false} connectNulls={false} />
+                {/* Inherited from the retired S-Curve tab: the NOW marker
+                    and the zoom brush, so nothing was lost with the tab. */}
+                {period && (
+                  <ReferenceLine x={period.label} stroke="rgba(212,175,55,0.5)" strokeDasharray="3 3"
+                                 label={{ value: isRtl ? 'الآن' : 'NOW', fill: '#d4af37', fontSize: 9, position: 'top' }} />
+                )}
+                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          {/* ══════════════════ TREND — moved into the Dashboard (owner rule) ══════════════════ */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="ds-card ds-card-raised">
+              <h3 className="sec-head">{isRtl ? 'مؤشرات الأداء' : 'Performance Indices'}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={points} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
+                  <XAxis dataKey="label" {...AXIS} />
+                  <YAxis domain={[0.6, 1.4]} {...AXIS} tickFormatter={(v: number) => v.toFixed(2)} />
+                  <Tooltip contentStyle={TT_STYLE}
+                           formatter={(v: any) => v === null ? '—' : Number(v).toFixed(3)} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <ReferenceLine y={1} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="spi" name="SPI" stroke={C_EV} strokeWidth={2}
+                        dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
+                  <Line type="monotone" dataKey="cpi" name="CPI" stroke={C_OK} strokeWidth={2}
+                        dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
+                  <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                         fill="rgba(0,0,0,0.3)" travellerWidth={8} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="ds-card ds-card-raised">
+              <h3 className="sec-head">{isRtl ? 'الانحرافات' : 'Variances'}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
+                  <XAxis dataKey="label" {...AXIS} />
+                  <YAxis {...AXIS} tickFormatter={shortMoney} />
+                  <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => formatMoney(Number(v), { currency: ccy })} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="sv" name="SV" stroke={C_WARN} strokeWidth={2}
+                        dot={manyPeriods ? false : { r: 2 }} />
+                  <Line type="monotone" dataKey="cv" name="CV" stroke={C_AC} strokeWidth={2}
+                        dot={manyPeriods ? false : { r: 2 }} />
+                  <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                         fill="rgba(0,0,0,0.3)" travellerWidth={8} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Forecast trend — VAC over time */}
+            <div className="xl:col-span-2 ds-card ds-card-raised">
+              <h3 className="sec-head">{isRtl ? 'اتجاه التوقعات — VAC / EAC' : 'Forecast Trend — VAC / EAC'}</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <ComposedChart data={points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
+                  <XAxis dataKey="label" {...AXIS} />
+                  <YAxis {...AXIS} tickFormatter={shortMoney} />
+                  <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="vac" name="VAC" stroke={C_WARN} strokeWidth={2}
+                        dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
+                  <Line type="monotone" dataKey="eac" name="EAC" stroke={C_AC} strokeWidth={1.5}
+                        dot={false} connectNulls={false} />
+                  <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                         fill="rgba(0,0,0,0.3)" travellerWidth={8} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Approved history table */}
+            <div className="xl:col-span-2 ds-table-wrap">
+              <table className="ds-table">
+                <thead>
+                  <tr>
+                    <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
+                    <th className="money">SPI</th>
+                    <th className="money">CPI</th>
+                    <th className="money">SV</th>
+                    <th className="money">CV</th>
+                    <th className="money">EAC</th>
+                    <th className="money">VAC</th>
+                    <th>{isRtl ? 'الحالة' : 'Status'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {points.filter(p => p.spi !== null || p.cpi !== null).length === 0 && (
+                    <tr><td colSpan={8}><div className="ds-empty">
+                      <div className="ds-empty-title">{isRtl ? 'لا توجد فترات بها بيانات' : 'No periods carry data yet'}</div>
+                    </div></td></tr>
+                  )}
+                  {points.filter(p => p.spi !== null || p.cpi !== null).map(p => (
+                    <tr key={p.seq}>
+                      <td className="col-pin font-mono text-primary">{p.label}</td>
+                      <td className={cn('money', indexTone(p.spi))}>{fmtIndex(p.spi)}</td>
+                      <td className={cn('money', indexTone(p.cpi))}>{fmtIndex(p.cpi)}</td>
+                      <td className={cn('money', varianceTone(p.sv))}>{formatMoney(p.sv, { currency: ccy })}</td>
+                      <td className={cn('money', varianceTone(p.cv))}>{formatMoney(p.cv, { currency: ccy })}</td>
+                      <td className={cn('money', p.eac !== null && p.eac > bac ? 'text-chart-3' : 'text-chart-4')}>
+                        {p.eac === null ? '—' : formatMoney(p.eac, { currency: ccy })}
+                      </td>
+                      <td className={cn('money', varianceTone(p.vac ?? 0))}>
+                        {p.vac === null ? '—' : formatMoney(p.vac, { currency: ccy })}
+                      </td>
+                      <td>
+                        <span className="flex items-center gap-1.5">
+                          <span className={cn('badge', STATUS_META[p.status].tone)}>
+                            {isRtl ? STATUS_META[p.status].ar : STATUS_META[p.status].en}
+                          </span>
+                          {p.frozen && <Lock className="w-3 h-3 text-muted-foreground" />}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
-
-      {/* ══════════════════ S-CURVE ══════════════════ */}
-      {tab === 'scurve' && (
-        <div className="ds-card ds-card-raised">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-            <h3 className="sec-head !mb-0">
-              {isRtl ? 'منحنى S — القيمة التراكمية' : 'S-Curve — Cumulative Value'}
-            </h3>
-            <span className="text-(length:--t-label) uppercase tracking-widest text-muted-foreground">
-              {(() => { const c = CADENCE_META.find(x => x.value === store.settings.cadence);
-                        return c ? (isRtl ? c.ar : c.en) : store.settings.cadence; })()}
-              {' · '}{store.periods.length} {isRtl ? 'فترة' : 'periods'}
-            </span>
-          </div>
-          <ResponsiveContainer width="100%" height={440}>
-            <ComposedChart data={points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
-              <XAxis dataKey="label" {...AXIS} />
-              <YAxis {...AXIS} tickFormatter={shortMoney} />
-              <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Area type="monotone" dataKey="pv" name="PV — Planned" stroke={C_PV}
-                    fill="rgba(139,138,134,0.10)" strokeWidth={1.5} dot={false} />
-              <Area type="monotone" dataKey="ev" name="EV — Earned" stroke={C_EV}
-                    fill="rgba(212,175,55,0.12)" strokeWidth={2} dot={false} connectNulls={false} />
-              <Line type="monotone" dataKey="ac" name="AC — Actual" stroke={C_AC}
-                    strokeWidth={1.5} dot={false} connectNulls={false} />
-              {/* Forecast at completion, so the curve shows where it ends up. */}
-              <ReferenceLine y={bac} stroke={C_EV} strokeDasharray="4 4"
-                             label={{ value: 'BAC', fill: C_EV, fontSize: 10, position: 'insideTopRight' }} />
-              {m.eac > 0 && (
-                <ReferenceLine y={m.eac} stroke={m.eac > bac ? C_AC : C_OK} strokeDasharray="2 4"
-                               label={{ value: 'EAC', fill: m.eac > bac ? C_AC : C_OK, fontSize: 10, position: 'insideBottomRight' }} />
-              )}
-              {/* Current reporting period marker. */}
-              {period && (
-                <ReferenceLine x={period.label} stroke="rgba(212,175,55,0.5)" strokeDasharray="3 3"
-                               label={{ value: isRtl ? 'الآن' : 'NOW', fill: '#d4af37', fontSize: 9, position: 'top' }} />
-              )}
-              {/* Brush = zoom. Drag the handles to focus a window. */}
-              <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
-                     fill="rgba(0,0,0,0.3)" travellerWidth={8} />
-            </ComposedChart>
-          </ResponsiveContainer>
-          <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
-            {isRtl
-              ? 'اسحب المقبضين أسفل الرسم للتكبير على نافذة زمنية. تبدأ خطوط EV و AC عند أول فترة تحمل بيانات.'
-              : 'Drag the handles below the chart to zoom a window. EV and AC begin at the first period carrying data.'}
-          </p>
-        </div>
-      )}
-
       {/* ══════════════════ MATRIX ══════════════════ */}
       {tab === 'matrix' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -2059,120 +2126,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
         </>
       )}
 
-      {/* ══════════════════ TREND ══════════════════ */}
-      {tab === 'trend' && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div className="ds-card ds-card-raised">
-            <h3 className="sec-head">{isRtl ? 'مؤشرات الأداء' : 'Performance Indices'}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={points} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
-                <XAxis dataKey="label" {...AXIS} />
-                <YAxis domain={[0.6, 1.4]} {...AXIS} tickFormatter={(v: number) => v.toFixed(2)} />
-                <Tooltip contentStyle={TT_STYLE}
-                         formatter={(v: any) => v === null ? '—' : Number(v).toFixed(3)} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <ReferenceLine y={1} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
-                <Line type="monotone" dataKey="spi" name="SPI" stroke={C_EV} strokeWidth={2}
-                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
-                <Line type="monotone" dataKey="cpi" name="CPI" stroke={C_OK} strokeWidth={2}
-                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
-                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
-                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="ds-card ds-card-raised">
-            <h3 className="sec-head">{isRtl ? 'الانحرافات' : 'Variances'}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
-                <XAxis dataKey="label" {...AXIS} />
-                <YAxis {...AXIS} tickFormatter={shortMoney} />
-                <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => formatMoney(Number(v), { currency: ccy })} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
-                <Line type="monotone" dataKey="sv" name="SV" stroke={C_WARN} strokeWidth={2}
-                      dot={manyPeriods ? false : { r: 2 }} />
-                <Line type="monotone" dataKey="cv" name="CV" stroke={C_AC} strokeWidth={2}
-                      dot={manyPeriods ? false : { r: 2 }} />
-                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
-                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Forecast trend — VAC over time */}
-          <div className="xl:col-span-2 ds-card ds-card-raised">
-            <h3 className="sec-head">{isRtl ? 'اتجاه التوقعات — VAC / EAC' : 'Forecast Trend — VAC / EAC'}</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
-                <XAxis dataKey="label" {...AXIS} />
-                <YAxis {...AXIS} tickFormatter={shortMoney} />
-                <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
-                <Line type="monotone" dataKey="vac" name="VAC" stroke={C_WARN} strokeWidth={2}
-                      dot={manyPeriods ? false : { r: 2 }} connectNulls={false} />
-                <Line type="monotone" dataKey="eac" name="EAC" stroke={C_AC} strokeWidth={1.5}
-                      dot={false} connectNulls={false} />
-                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
-                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Approved history table */}
-          <div className="xl:col-span-2 ds-table-wrap">
-            <table className="ds-table">
-              <thead>
-                <tr>
-                  <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
-                  <th className="money">SPI</th>
-                  <th className="money">CPI</th>
-                  <th className="money">SV</th>
-                  <th className="money">CV</th>
-                  <th className="money">EAC</th>
-                  <th className="money">VAC</th>
-                  <th>{isRtl ? 'الحالة' : 'Status'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {points.filter(p => p.spi !== null || p.cpi !== null).length === 0 && (
-                  <tr><td colSpan={8}><div className="ds-empty">
-                    <div className="ds-empty-title">{isRtl ? 'لا توجد فترات بها بيانات' : 'No periods carry data yet'}</div>
-                  </div></td></tr>
-                )}
-                {points.filter(p => p.spi !== null || p.cpi !== null).map(p => (
-                  <tr key={p.seq}>
-                    <td className="col-pin font-mono text-primary">{p.label}</td>
-                    <td className={cn('money', indexTone(p.spi))}>{fmtIndex(p.spi)}</td>
-                    <td className={cn('money', indexTone(p.cpi))}>{fmtIndex(p.cpi)}</td>
-                    <td className={cn('money', varianceTone(p.sv))}>{formatMoney(p.sv, { currency: ccy })}</td>
-                    <td className={cn('money', varianceTone(p.cv))}>{formatMoney(p.cv, { currency: ccy })}</td>
-                    <td className={cn('money', p.eac !== null && p.eac > bac ? 'text-chart-3' : 'text-chart-4')}>
-                      {p.eac === null ? '—' : formatMoney(p.eac, { currency: ccy })}
-                    </td>
-                    <td className={cn('money', varianceTone(p.vac ?? 0))}>
-                      {p.vac === null ? '—' : formatMoney(p.vac, { currency: ccy })}
-                    </td>
-                    <td>
-                      <span className="flex items-center gap-1.5">
-                        <span className={cn('badge', STATUS_META[p.status].tone)}>
-                          {isRtl ? STATUS_META[p.status].ar : STATUS_META[p.status].en}
-                        </span>
-                        {p.frozen && <Lock className="w-3 h-3 text-muted-foreground" />}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
