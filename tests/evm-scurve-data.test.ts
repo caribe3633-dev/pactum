@@ -76,3 +76,38 @@ describe('the data date — a slice-only month is not a result', () => {
     expect(reportingPeriod(indirectSliced, new Date('2025-03-15'))?.id).toBe('m1');
   });
 });
+
+describe('the trend EAC — live on every row, never the approval-time freeze', () => {
+  it('an approved row answers with the OFFICIAL method against TODAY\u2019S BAC', () => {
+    // The freeze says EAC 750k — computed under the atypical method at
+    // approval time. In a trend column that number answers a question
+    // nobody is asking any more.
+    const approved = m(1, {
+      pv: 100, ev: 80, ac: 100,
+      status: 'approved',
+      frozen: {
+        pv: 100, ev: 80, ac: 100, bac: 1_000_000,
+        spi: 0.8, cpi: 0.8, sv: -20, cv: -20,
+        eac: 750_000, etc: 650_000, vac: 250_000, tcpi: null,
+        eacMethod: 'atypical', frozenAt: '2025-02-01T00:00:00Z', baselineId: '',
+      },
+    });
+    const s = series([approved], 1_000_000, 'cpi');
+    // LIVE: BAC / CPI_cum = 1,000,000 / (80/100) = 1,250,000
+    expect(s[0].eac).toBeCloseTo(1_250_000, 6);
+    expect(s[0].vac).toBeCloseTo(-250_000, 6);
+    // the frozen audit stays exactly as signed
+    expect(approved.frozen!.eac).toBe(750_000);
+  });
+
+  it('every row uses the same basis, so the trend reads as a trend', () => {
+    const rows = [
+      m(1, { pv: 100, ev: 80, ac: 100, status: 'approved' }),
+      m(2, { pv: 200, ev: 170, ac: 200, status: 'approved' }),
+    ];
+    const s = series(rows, 1_000_000, 'cpi');
+    // row 1: 1M / 0.8 ; row 2: 1M / 0.85 — one method, one BAC, two moments
+    expect(s[0].eac).toBeCloseTo(1_250_000, 6);
+    expect(s[1].eac).toBeCloseTo(1_000_000 / 0.85, 6);
+  });
+});

@@ -1291,6 +1291,23 @@ export function series(
     const started = hasActuals(p);
     const cum = started ? cumulativeTo(periods, p) : undefined;
     const m = periodMetrics(p, bac, eacMethod, cum);
+    /**
+     * THE FORECAST IS LIVE ON EVERY ROW (trend fix, owner report).
+     *
+     * EAC and VAC used to arrive frozen on approved rows — computed with
+     * whatever method and BAC were official at approval time. In a TREND
+     * table that mixes baselines across rows: every line answered a
+     * different question, and the last row disagreed with the dashboard
+     * headline EAC after any method change or re-baseline. Now every row
+     * answers from ITS cumulative performance with the OFFICIAL method
+     * and TODAY'S BAC — the exact formula the dashboard uses. The frozen
+     * snapshot stays on `p.frozen`, untouched, as the audit of what was
+     * signed; actuals (PV/EV/AC/SV/CV/SPI/CPI) remain the frozen record.
+     */
+    const ev = started ? (p.frozen ? p.frozen.ev : p.ev) : 0;
+    const ac = started ? (p.frozen ? p.frozen.ac : p.ac) : 0;
+    const fc = eacFor(eacMethod, bac, ev, ac, cum?.cpiCum ?? null, cum?.spiCum ?? null);
+    const liveEac = Number.isFinite(fc.eac) ? fc.eac : bac;
     return {
       label: p.label,
       end: p.end,
@@ -1302,8 +1319,8 @@ export function series(
       cpi: started ? m.cpi : null,
       sv: started ? m.sv : 0,
       cv: started ? m.cv : 0,
-      eac: started ? m.eac : null,
-      vac: started ? m.vac : null,
+      eac: started ? liveEac : null,
+      vac: started ? bac - liveEac : null,
       status: p.status,
       approved: p.status === 'approved',
       frozen: Boolean(p.frozen),
