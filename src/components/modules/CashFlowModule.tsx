@@ -1154,7 +1154,11 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
       <div>
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
           <h3 className="sec-head !mb-0 flex-1">{t.monthlyLedger}</h3>
-          <ReportButton reportId="cash-flow" context={{ project, rows: data, totalIn, totalOut, netFlow, reportCurrency: money.base }} />
+          <ReportButton reportId="cash-flow" context={{ project, rows: data, totalIn, totalOut, netFlow, reportCurrency: money.base,
+            // The chronological cumulative position + variance totals —
+            // the report must print the engine's date-ordered figures,
+            // never the legacy entry-order cumNet (owner review).
+            cum: cashCumulativeTable(chronoRows), varianceTotals }} />
           {canEdit && (
             <button onClick={() => setIsAdding(!isAdding)} className="btn btn-secondary btn-sm">
               <Plus className="w-3 h-3" /> {t.add}

@@ -194,11 +194,14 @@ export default function OverviewModule({
       return {
         pct: snap.bac > 0 ? snap.m.ev / snap.bac : null,
         period: snap.period?.label ?? '',
+        position: lang === 'ar' ? snap.quadrant.ar : snap.quadrant.en,
+        spi: snap.m.spi === null ? '—' : snap.m.spi.toFixed(3),
+        cpi: snap.m.cpi === null ? '—' : snap.m.cpi.toFixed(3),
       };
     } catch {
-      return { pct: null, period: '' };
+      return { pct: null, period: '', position: '', spi: '—', cpi: '—' };
     }
-  }, [project]);
+  }, [project, lang]);
   /** The percent the whole screen quotes — earned when measurable, the
    *  stored record otherwise (legacy), so summaries never blank out. */
   const progressPct = evmProgress.pct ?? project.progress;
@@ -598,7 +601,16 @@ export default function OverviewModule({
           <ReportButton
             reportId="project-dashboard"
             context={{ project, computed, summary: lang === 'ar' ? summaryAr : summaryEn,
-                       reportCurrency: ccy }}
+                       reportCurrency: ccy,
+                       // The executive report quotes the SAME earned
+                       // numbers as the screens (owner review).
+                       evm: {
+                         progressPct: evmProgress.pct,
+                         period: evmProgress.period,
+                         position: evmProgress.position,
+                         spi: evmProgress.spi,
+                         cpi: evmProgress.cpi,
+                       } }}
           />
         </div>
         {/*

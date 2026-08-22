@@ -34,6 +34,13 @@ interface Ctx {
 }
 
 /** The identity block every report shares. */
+/**
+ * Bilingual report text: the report body speaks the reader's language.
+ * Arabic covers the four commercial-core reports (Budget, Project
+ * Dashboard, Cash Flow, Earned Value); English stays the fallback.
+ */
+const L = (m: BuildMeta, en: string, ar: string): string => (m.lang === 'ar' ? ar : en);
+
 function meta(ctx: Ctx, m: BuildMeta, title: string, subtitle?: string, version = '1.0') {
   const p = ctx.project;
   return {
@@ -294,27 +301,48 @@ registerReport<Ctx & { rows?: any[]; totalIn?: number; totalOut?: number; netFlo
   scope: 'Project',
   build: (ctx, m) => {
     const rows = (ctx.rows ?? []) as any[];
+    /** The CHRONOLOGICAL cumulative position (owner review): the old
+     *  column printed the stored `cumNet`, accumulated in ENTRY order —
+     *  a running total that could go down. ctx.cum is the engine's
+     *  date-ordered derivation, the same one the screen's cumulative
+     *  table prints; planned columns and variance match the ledger. */
+    const cum = (ctx.cum ?? []) as any[];
+    const lines = cum.map((r: any) => {
+      const row = rows.find(x => x.month === r.month) ?? {};
+      return {
+        month: r.month,
+        plannedIn: r.cumPlannedIn,
+        plannedOut: r.cumPlannedOut,
+        in: Number(row.in) || 0,
+        out: Number(row.out) || 0,
+        variance: r.variance,
+        net: r.cumNet,
+      };
+    });
     return {
       meta: meta(ctx, m, 'Cash Flow', 'Monthly Ledger'),
       page: A4, cover: true,
       sections: [
         { kind: 'kpi', columns: 3, items: [
-          { label: 'Cash In',  value: money(ctx.totalIn),  unit: unit(ctx), tone: 'ok' },
-          { label: 'Cash Out', value: money(ctx.totalOut), unit: unit(ctx), tone: 'risk' },
-          { label: 'Net Position', value: money(ctx.netFlow), unit: unit(ctx),
+          { label: L(m, 'Cash In', 'نقدية داخل'), value: money(ctx.totalIn), unit: unit(ctx), tone: 'ok' },
+          { label: L(m, 'Cash Out', 'نقدية خارج'), value: money(ctx.totalOut), unit: unit(ctx), tone: 'risk' },
+          { label: L(m, 'Net Position', 'الصافي'), value: money(ctx.netFlow), unit: unit(ctx),
             tone: (Number(ctx.netFlow) || 0) >= 0 ? 'gold' : 'risk' },
         ]},
-        { kind: 'table', title: 'Monthly Ledger',
+        { kind: 'table', title: L(m, 'Cumulative Position — by Period', 'الموقف التراكمي — لكل فترة'),
           columns: [
-            { key: 'month', label: 'Month' },
-            { key: 'in', label: 'Cash In', money: true },
-            { key: 'out', label: 'Cash Out', money: true },
-            { key: 'net', label: 'Net', money: true },
-            { key: 'cumNet', label: 'Cumulative', money: true },
+            { key: 'month', label: L(m, 'Month', 'الفترة') },
+            { key: 'plannedIn', label: L(m, 'Cum. Planned In', 'تراكمي وارد مخطط'), money: true },
+            { key: 'plannedOut', label: L(m, 'Cum. Planned Out', 'تراكمي صادر مخطط'), money: true },
+            { key: 'in', label: L(m, 'Cash In', 'وارد فعلي'), money: true },
+            { key: 'out', label: L(m, 'Cash Out', 'صادر فعلي'), money: true },
+            { key: 'variance', label: L(m, 'Cum. Variance', 'الانحراف التراكمي'), money: true },
+            { key: 'net', label: L(m, 'Cumulative Net', 'الصافي التراكمي'), money: true },
           ],
-          rows,
-          total: { label: 'Total', span: 1, values: {
-            in: ctx.totalIn ?? 0, out: ctx.totalOut ?? 0, net: ctx.netFlow ?? 0, cumNet: '',
+          rows: lines,
+          total: { label: L(m, 'Closing', 'المقفل'), span: 5, values: {
+            variance: lines.length ? lines[lines.length - 1].variance : '',
+            net: lines.length ? lines[lines.length - 1].net : '',
           }} },
         sig(['Cost Control Engineer', 'Finance Manager']),
       ],
@@ -471,30 +499,44 @@ registerReport<Ctx & { computed?: any; summary?: string }>({
   build: (ctx, m) => {
     const p = (ctx.project ?? {}) as Record<string, any>;
     const c = (ctx.computed ?? {}) as Record<string, any>;
+    const ev = (ctx.evm ?? {}) as Record<string, any>;
+    /** PROGRESS IS EARNED (owner rule): EV ÷ BAC from the engine, the
+     *  same number every screen prints. The stored manual field is a
+     *  fallback only, for projects with nothing measurable yet. */
+    const earned = typeof ev.progressPct === 'number' ? ev.progressPct : null;
+    const progressPct = earned ?? (Number(p.progress) || 0);
     return {
       meta: meta(ctx, m, 'Project Dashboard', 'Executive Overview'),
       page: A4, cover: true, toc: true,
       sections: [
-        ...(ctx.summary ? [{ kind: 'summary' as const, title: 'Executive Summary', text: ctx.summary }] : []),
-        { kind: 'kpi', title: 'Contract Position', columns: 4, items: [
-          { label: 'Contract Value', value: money(p.contractValue), unit: unit(ctx) },
-          { label: 'Contract Amount',  value: money(c.revisedContractValue), unit: unit(ctx), tone: 'gold' },
-          { label: 'Approved COs',      value: money(c.totalApprovedCOs), unit: unit(ctx) },
-          { label: 'Approved Claims',   value: money(c.totalApprovedClaims), unit: unit(ctx) },
+        ...(ctx.summary ? [{ kind: 'summary' as const, title: L(m, 'Executive Summary', 'الملخص التنفيذي'), text: ctx.summary }] : []),
+        { kind: 'kpi', title: L(m, 'Contract Position', 'الموقف التعاقدي'), columns: 4, items: [
+          { label: L(m, 'Contract Value', 'قيمة العقد'), value: money(p.contractValue), unit: unit(ctx) },
+          { label: L(m, 'Contract Amount', 'المبلغ التعاقدي'), value: money(c.revisedContractValue), unit: unit(ctx), tone: 'gold' },
+          { label: L(m, 'Approved COs', 'أوامر تغيير معتمدة'), value: money(c.totalApprovedCOs), unit: unit(ctx) },
+          { label: L(m, 'Approved Claims', 'مطالبات معتمدة'), value: money(c.totalApprovedClaims), unit: unit(ctx) },
         ]},
-        { kind: 'kpi', title: 'Progress & Time', columns: 4, items: [
-          { label: 'Physical Progress', value: percent(p.progress), tone: 'ok' },
-          { label: 'Current Delay',     value: c.currentDelay ?? p.delayDays ?? 0, unit: 'DAYS', tone: 'warn' },
-          { label: 'Approved EOT',      value: c.totalApprovedEOT ?? 0, unit: 'DAYS', tone: 'gold' },
-          { label: 'Contract Completion', value: reportDate(p.contractualCompletion, m.lang) },
+        { kind: 'kpi', title: L(m, 'Progress & Time', 'التقدم والزمن'), columns: 4, items: [
+          { label: L(m, 'Progress (Earned — EV ÷ BAC)', 'التقدم (مكتسب — EV ÷ BAC)'),
+            value: earned === null ? percent(p.progress) : percent(earned), tone: 'ok' },
+          { label: L(m, 'Current Delay', 'التأخير الحالي'), value: c.currentDelay ?? p.delayDays ?? 0, unit: 'DAYS', tone: 'warn' },
+          { label: L(m, 'Approved EOT', 'تمديد معتمد'), value: c.totalApprovedEOT ?? 0, unit: 'DAYS', tone: 'gold' },
+          { label: L(m, 'Contract Completion', 'الإنجاز التعاقدي'), value: reportDate(p.contractualCompletion, m.lang) },
         ]},
-        { kind: 'kpi', title: 'Cash Position', columns: 3, items: [
-          { label: 'Cash Received',  value: money(c.totalCashReceived), unit: unit(ctx), tone: 'ok' },
-          { label: 'Cash Disbursed', value: money(c.totalCashDisbursed), unit: unit(ctx), tone: 'risk' },
-          { label: 'Net Position',   value: money((Number(c.totalCashReceived) || 0) - (Number(c.totalCashDisbursed) || 0)), unit: unit(ctx), tone: 'gold' },
+        { kind: 'kpi', title: L(m, 'Performance Position', 'موقف الأداء'), columns: 3, items: [
+          { label: L(m, 'EVM Position', 'موقف القيمة المكتسبة'),
+            value: String(ev.position ?? '—'), tone: 'gold' },
+          { label: L(m, 'Basis Period', 'فترة الأساس'), value: String(ev.period ?? '—') },
+          { label: L(m, 'SPI · CPI', 'SPI · CPI'),
+            value: `${ev.spi ?? '—'} · ${ev.cpi ?? '—'}` },
         ]},
-        { kind: 'bars', title: 'Completion', items: [
-          { label: 'Physical Progress', ratio: Number(p.progress) || 0, value: percent(p.progress), tone: 'ok' },
+        { kind: 'kpi', title: L(m, 'Cash Position', 'الموقف النقدي'), columns: 3, items: [
+          { label: L(m, 'Cash Received', 'نقدية واردة'), value: money(c.totalCashReceived), unit: unit(ctx), tone: 'ok' },
+          { label: L(m, 'Cash Disbursed', 'نقدية صادرة'), value: money(c.totalCashDisbursed), unit: unit(ctx), tone: 'risk' },
+          { label: L(m, 'Net Position', 'الصافي'), value: money((Number(c.totalCashReceived) || 0) - (Number(c.totalCashDisbursed) || 0)), unit: unit(ctx), tone: 'gold' },
+        ]},
+        { kind: 'bars', title: L(m, 'Completion', 'الإنجاز'), items: [
+          { label: L(m, 'Earned Progress', 'التقدم المكتسب'), ratio: progressPct, value: percent(progressPct), tone: 'ok' },
         ]},
         sig(['Project Manager', 'Project Director']),
       ],
@@ -550,24 +592,42 @@ registerReport<Ctx & { rows?: any[] }>({
   scope: 'Project',
   build: (ctx, m) => {
     const rows = (ctx.rows ?? []) as any[];
+    /** Cost class + Remaining derived per line — exactly what the
+     *  screen's ledger shows. The dead Forecast/Variance columns are
+     *  gone from print (owner review): they printed zeros since the
+     *  fields left the screen. */
+    const ct = (r: any) => {
+      const t = String(r?.costType ?? '').toLowerCase();
+      const v = t === 'direct' || t === 'indirect' ? t : 'unclassified';
+      return L(m, v === 'unclassified' ? 'Unclassified' : v === 'direct' ? 'Direct' : 'Indirect',
+               v === 'unclassified' ? 'غير مصنَّف' : v === 'direct' ? 'مباشر' : 'غير مباشر');
+    };
+    const lines = rows.map(r => ({
+      category: r.category,
+      costType: ct(r),
+      planned: Number(r.planned) || 0,
+      actual: Number(r.actual) || 0,
+      remaining: (Number(r.planned) || 0) - (Number(r.actual) || 0),
+    }));
+    const tot = lines.reduce(
+      (a, r) => ({ planned: a.planned + r.planned, actual: a.actual + r.actual, remaining: a.remaining + r.remaining }),
+      { planned: 0, actual: 0, remaining: 0 },
+    );
     return {
       meta: meta(ctx, m, 'Budget', 'Cost Breakdown Structure'),
       page: A4, cover: true,
       sections: [
-        { kind: 'table', title: 'Budget Ledger',
+        { kind: 'table', title: L(m, 'Budget Ledger', 'سجل الموازنة'),
           columns: [
-            { key: 'category', label: 'Category' },
-            { key: 'planned', label: 'Planned', money: true },
-            { key: 'actual', label: 'Actual', money: true },
-            { key: 'forecast', label: 'Forecast', money: true },
-            { key: 'variance', label: 'Variance', money: true },
+            { key: 'category', label: L(m, 'Category', 'البند') },
+            { key: 'costType', label: L(m, 'Cost Type', 'نوع التكلفة') },
+            { key: 'planned', label: L(m, 'Planned', 'المخطط'), money: true },
+            { key: 'actual', label: L(m, 'Actual', 'الفعلي'), money: true },
+            { key: 'remaining', label: L(m, 'Remaining', 'المتبقي'), money: true },
           ],
-          rows,
-          total: { label: 'Total', span: 1, values: {
-            planned:  rows.reduce((a, r) => a + (Number(r.planned) || 0), 0),
-            actual:   rows.reduce((a, r) => a + (Number(r.actual) || 0), 0),
-            forecast: rows.reduce((a, r) => a + (Number(r.forecast) || 0), 0),
-            variance: rows.reduce((a, r) => a + (Number(r.variance) || 0), 0),
+          rows: lines,
+          total: { label: L(m, 'Total', 'الإجمالي'), span: 2, values: {
+            planned: tot.planned, actual: tot.actual, remaining: tot.remaining,
           }} },
         sig(['Cost Control Engineer', 'Commercial Manager']),
       ],
@@ -596,15 +656,17 @@ registerReport<Ctx & { evm?: any }>({
     const idx = (v: unknown) => (v === null || v === undefined ? '—' : Number(v).toFixed(3));
     const sections: Section[] = [];
 
-    sections.push({ kind: 'info', title: 'Reporting Basis', columns: 4, items: [
-      { label: 'Reporting Period', value: String(e.period ?? '—') },
-      { label: 'Period Status',    value: String(e.periodStatus ?? '—') },
-      { label: 'Cadence',          value: String(e.cadence ?? '—') },
-      { label: 'Approved Periods', value: String(e.approvedPeriods ?? 0) },
-      { label: 'Baseline',         value: String(e.baselineName ?? '—') },
-      { label: 'EAC Method',       value: String(e.eacMethodLabel ?? '—') },
-      { label: 'Forecast Basis',   value: `${e.cumulativePeriods ?? 0} cumulative periods` },
-      { label: 'EVM Health',       value: String(e.health ?? '—') },
+    sections.push({ kind: 'info', title: L(m, 'Reporting Basis', 'أساس التقرير'), columns: 4, items: [
+      { label: L(m, 'Reporting Period', 'فترة التقرير'), value: String(e.period ?? '—') },
+      { label: L(m, 'Period Status',    'حالة الفترة'), value: String(e.periodStatus ?? '—') },
+      { label: L(m, 'Cadence',          'الدورية'), value: String(e.cadence ?? '—') },
+      { label: L(m, 'Approved Periods', 'فترات معتمدة'), value: String(e.approvedPeriods ?? 0) },
+      { label: L(m, 'Baseline',         'الأساس'), value: String(e.baselineName ?? '—') },
+      { label: L(m, 'EAC Method',       'طريقة EAC'), value: String(e.eacMethodLabel ?? '—') },
+      { label: L(m, 'Forecast Basis',   'أساس التوقع'), value: `${e.cumulativePeriods ?? 0} cumulative periods` },
+      { label: L(m, 'Current Position', 'الموقف الحالي'), value: String(e.quadrant ?? '—') },
+      { label: L(m, 'Index Basis (SPI/CPI)', 'أساس المؤشرات (SPI/CPI)'),
+        value: L(m, 'latest approved period', 'آخر فترة معتمدة') },
     ]});
 
     if (e.healthReasons) {
@@ -645,6 +707,32 @@ registerReport<Ctx & { evm?: any }>({
         tone: (Number(e.slipDays) || 0) > 0 ? 'risk' : 'ok' },
       { label: 'Position',        value: String(e.quadrant ?? '—') },
     ]});
+
+    /** PERFORMANCE BY COST CLASS (owner review): the approved split the
+     *  screen prints — Direct / Indirect / Total at the latest approved
+     *  period. No per-class CPI: the indirect class carries little or
+     *  no AC by nature; cost verdicts live in CV / VAC. */
+    const cs = (ctx.classSplit ?? null) as any;
+    if (cs && cs.available) {
+      sections.push({ kind: 'table', title: L(m, 'Performance by Cost Class', 'الأداء حسب فئة التكلفة'),
+        columns: [
+          { key: 'k', label: L(m, 'Class', 'الفئة') },
+          { key: 'bac', label: 'BAC', money: true },
+          { key: 'pv', label: 'PV', money: true },
+          { key: 'ev', label: 'EV', money: true },
+          { key: 'ac', label: 'AC', money: true },
+          { key: 'cv', label: 'CV', money: true },
+          { key: 'eac', label: 'EAC', money: true },
+          { key: 'etc', label: 'ETC', money: true },
+          { key: 'vac', label: 'VAC', money: true },
+        ],
+        rows: [
+          { k: L(m, 'Direct', 'مباشرة'),   ...cs.direct },
+          { k: L(m, 'Indirect', 'غير مباشرة'), ...cs.indirect },
+          { k: L(m, 'Total', 'الإجمالي'),  ...cs.total },
+        ],
+      });
+    }
 
     const opts = (ctx.eacOptions ?? []) as any[];
     if (opts.length) {

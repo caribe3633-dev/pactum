@@ -29,7 +29,7 @@ import {
   STATUS_META, NEXT_STATUS, ACTIVE_STATUSES, currentPeriodIndex,
   EvmStore, EvmPeriod, PeriodStatus, Cadence, EvmSnapshot,
   // ── Refinement additions ──
-  periodMetrics, cumulativeTo, eacComparison, EAC_META, EacMethod, EacOption, latestApproved,
+  periodMetrics, cumulativeTo, eacComparison, EAC_META, EacMethod, EacOption, latestApproved, eacFor,
   classifyHealth, HealthVerdict, activeBaseline, rebaseline, seedBaseline,
   generateFuturePeriods, redistributePv, effectiveBounds,
   CADENCE_META, REBASELINE_CAUSES, RebaselineCause, Baseline,
@@ -541,15 +541,32 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
     // was approved even after a re-baseline.
     periods: store.periods.map(p => {
       const pm = periodMetrics(p, bac, store.settings.eacMethod, cumulativeTo(store.periods, p));
+      /** THE FORECAST IS LIVE ON EVERY ROW (owner review): printed EAC
+       *  answers with the OFFICIAL method and TODAY'S BAC from the
+       *  row's cumulative performance — never the approval-time freeze,
+       *  which mixed bases across rows after any method change. */
+      const cumP = cumulativeTo(store.periods, p);
+      const fc = eacFor(store.settings.eacMethod, bac, pm.ev, pm.ac, cumP.cpiCum, cumP.spiCum);
+      const liveEac = Number.isFinite(fc.eac) ? fc.eac : bac;
       return {
         label: p.label, start: p.start, end: p.end,
         pv: pm.pv, ev: pm.ev, ac: pm.ac,
         spi: pm.spi, cpi: pm.cpi, sv: pm.sv, cv: pm.cv,
-        eac: pm.eac, vac: pm.vac,
+        eac: liveEac, vac: bac - liveEac,
         status: p.status, reviewer: p.reviewer, reviewDate: p.reviewDate,
         frozen: Boolean(p.frozen),
       };
     }),
+    // The approved cost-class split, exactly as the screen's table prints
+    // it (latest approved period; totals from aggregates, never averaged).
+    ...(bacSplit.available && latestApproved(store.periods) ? {
+      classSplit: (() => {
+        const clsP = latestApproved(store.periods)!;
+        const cm = classMetrics(store.periods, clsP, bacSplit, store.settings.eacMethod);
+        const row = (x: any) => ({ bac: x.bac, pv: x.pv, ev: x.ev, ac: x.ac, cv: x.cv, eac: x.eac, etc: x.etc, vac: x.vac });
+        return { available: true, direct: row(cm.direct), indirect: row(cm.indirect), total: row(cm.total) };
+      })(),
+    } : {}),
   };
 
   // ── No programme, no periods ──
