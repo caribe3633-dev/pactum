@@ -84,10 +84,18 @@ const AXIS = { stroke: '#a5a49f', tick: { fontSize: 10, fill: '#a5a49f' } };
 
 const TT_STYLE: React.CSSProperties = {
   background: '#1b1c1c',
-  border: '1px solid rgba(212,175,55,0.3)',
-  borderRadius: 0,
-  fontSize: 11,
+  border: '1px solid rgba(212,175,55,0.35)',
+  borderRadius: 4,
+  fontSize: 12,
+  padding: '8px 12px',
+  color: '#ffffff',
 };
+/** Tooltip readability (owner report): the period label in gold, the
+ *  figures in white mono digits, and a soft gold cursor band under the
+ *  pointer — hover was grey-on-dark and unreadable on every chart. */
+const TT_LABEL: React.CSSProperties = { color: '#d4af37', fontWeight: 600, marginBottom: 4 };
+const TT_ITEM: React.CSSProperties = { color: '#ffffff', fontFamily: 'var(--font-mono)' };
+const TT_CURSOR = { fill: 'rgba(212,175,55,0.10)', stroke: 'rgba(212,175,55,0.35)' };
 
 // The tab set after the owner's consolidation: the S-Curve chart lives
 // in the Dashboard and the Trend content moved into the Dashboard too —
@@ -983,7 +991,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
                 <XAxis dataKey="label" {...AXIS} />
                 <YAxis {...AXIS} tickFormatter={shortMoney} />
-                <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
+                <Tooltip contentStyle={TT_STYLE} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={TT_CURSOR} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <ReferenceLine y={bac} stroke={C_EV} strokeDasharray="4 4"
                                label={{ value: 'BAC', fill: C_EV, fontSize: 10, position: 'insideTopRight' }} />
@@ -1014,7 +1022,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
                   <XAxis dataKey="label" {...AXIS} />
                   <YAxis domain={[0.6, 1.4]} {...AXIS} tickFormatter={(v: number) => v.toFixed(2)} />
-                  <Tooltip contentStyle={TT_STYLE}
+                  <Tooltip contentStyle={TT_STYLE} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={TT_CURSOR}
                            formatter={(v: any) => v === null ? '—' : Number(v).toFixed(3)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine y={1} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
@@ -1035,7 +1043,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
                   <XAxis dataKey="label" {...AXIS} />
                   <YAxis {...AXIS} tickFormatter={shortMoney} />
-                  <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => formatMoney(Number(v), { currency: ccy })} />
+                  <Tooltip contentStyle={TT_STYLE} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={TT_CURSOR} formatter={(v: any) => formatMoney(Number(v), { currency: ccy })} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
                   <Line type="monotone" dataKey="sv" name="SV" stroke={C_WARN} strokeWidth={2}
@@ -1056,7 +1064,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
                   <XAxis dataKey="label" {...AXIS} />
                   <YAxis {...AXIS} tickFormatter={shortMoney} />
-                  <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
+                  <Tooltip contentStyle={TT_STYLE} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={TT_CURSOR} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
                   <Line type="monotone" dataKey="vac" name="VAC" stroke={C_WARN} strokeWidth={2}
@@ -1143,6 +1151,9 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <ReferenceLine y={1} stroke="rgba(212,175,55,0.35)" strokeDasharray="4 4" />
                 <Tooltip
                   contentStyle={TT_STYLE}
+                  labelStyle={TT_LABEL}
+                  itemStyle={TT_ITEM}
+                  cursor={TT_CURSOR}
                   formatter={(v: any, n: any) =>
                     n === 'vac' || n === 'eac'
                       ? [formatMoney(Number(v), { currency: ccy }), n.toUpperCase()]
@@ -1975,7 +1986,7 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                 <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
                 <XAxis dataKey="label" {...AXIS} />
                 <YAxis {...AXIS} tickFormatter={shortMoney} />
-                <Tooltip contentStyle={TT_STYLE} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
+                <Tooltip contentStyle={TT_STYLE} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={TT_CURSOR} formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <ReferenceLine y={bac} stroke={C_EV} strokeDasharray="4 4"
                                label={{ value: 'BAC', fill: C_EV, fontSize: 10, position: 'insideTopRight' }} />

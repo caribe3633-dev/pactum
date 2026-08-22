@@ -3,8 +3,8 @@ import { Project } from '../../lib/data';
 import { useTranslation } from '../../lib/i18n';
 import { formatMoney } from '../../lib/utils';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Brush, Cell, ReferenceLine,
+  ComposedChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine,
 } from 'recharts';
 import { Plus, Trash2, RefreshCw, ArrowRightLeft, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, CalendarRange, TrendingUp } from 'lucide-react';
 // The platform's single date renderer — `30 June 2025` everywhere.
@@ -555,8 +555,12 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
   const eligibleIPCs = ownerCerts.filter(c => c.status === 'paid').length;
 
   const tooltipStyle = {
-    contentStyle: { backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--primary)/0.3)', borderRadius: 0 },
-    itemStyle: { fontFamily: 'var(--font-mono)', fontSize: '12px' },
+    contentStyle: { backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--primary)/0.35)', borderRadius: 4, padding: '8px 12px', fontSize: '12px', color: '#ffffff' },
+    /** Tooltip readability (owner report): gold period label, white mono
+     *  figures, soft gold cursor — hover was grey-on-dark everywhere. */
+    labelStyle: { color: 'hsl(var(--primary))', fontWeight: 600, marginBottom: 4 },
+    itemStyle: { fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#ffffff' },
+    cursor: { fill: 'rgba(212,175,55,0.10)', stroke: 'rgba(212,175,55,0.35)' },
   };
 
   return (
@@ -1040,16 +1044,18 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
               <Tooltip {...tooltipStyle} formatter={(v: number) => formatMoney(v, { currency: money.base })} />
               <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
               <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
-              <Bar dataKey="net" name={lang === 'ar' ? 'الصافي الفعلي' : 'Actual Net'} radius={[2, 2, 0, 0]}>
-                {netRows.map((r, i) => (
-                  <Cell key={i} fill={r.net >= 0 ? CASH_IN : CASH_OUT} />
-                ))}
-              </Bar>
+              {/* Owner rule: the balance story in ONE colour — the actual
+                  net SOLID gold, the planned net DASHED gold. */}
+              <Line type="monotone" dataKey="net"
+                    name={lang === 'ar' ? 'الصافي الفعلي' : 'Actual Net'}
+                    stroke="#d4af37" strokeWidth={2.5}
+                    dot={manyPeriods ? false : { r: 3, fill: '#d4af37', strokeWidth: 0 }}
+                    connectNulls={false} />
               {hasAnyPlan && (
                 <Line type="monotone" dataKey="plannedNet"
                       name={lang === 'ar' ? 'الصافي المخطط' : 'Planned Net'}
-                      stroke="#a5a49f" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.7}
-                      dot={manyPeriods ? false : { r: 2.5 }} connectNulls={false} />
+                      stroke="#d4af37" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.75}
+                      dot={false} connectNulls={false} />
               )}
               <Brush dataKey="month" height={22} stroke="rgba(212,175,55,0.4)"
                      fill="rgba(0,0,0,0.3)" travellerWidth={8} />

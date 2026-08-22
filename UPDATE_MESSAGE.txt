@@ -1,1 +1,1 @@
-Cash Flow gets a Net tab: actual net per period (green when it collects, red when it burns) against the planned balance line, plus a read-only table with per-period variance and a total row. Unplanned periods state no figure rather than an invented one
+Chart tooltips fixed everywhere: gold period label, white mono figures on a padded dark card, and a soft gold cursor band on hover — readable on every EVM and Cash Flow chart. Net chart restyled: actual net as a solid gold line, planned net as a dashed gold line
