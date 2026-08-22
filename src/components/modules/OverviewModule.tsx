@@ -11,6 +11,7 @@ import { computeApprovedEOT, syncDelayRegister, computeLd, computeProgramme } fr
 // progress card reads EV ÷ BAC from the same EVM engine the dashboard
 // runs — one number everywhere, no manual field that silently sits at 0.
 import { snapshot as evmSnapshot, readSyncedEvm } from '../../lib/evm';
+import { cashCumulativeTable } from '../../lib/cashFlowMoney';
 import ReportButton from '../reporting/ReportButton';
 // SPRINT 1 · TASK 1 — commercial totals must never add two currencies.
 // The rows were already converted at save time; the contract base was not.
@@ -197,11 +198,22 @@ export default function OverviewModule({
         position: lang === 'ar' ? snap.quadrant.ar : snap.quadrant.en,
         spi: snap.m.spi === null ? '—' : snap.m.spi.toFixed(3),
         cpi: snap.m.cpi === null ? '—' : snap.m.cpi.toFixed(3),
+        // The unified monthly report quotes the same engine numbers.
+        eac: snap.m.eac, vac: snap.m.vac,
+        percentPlanned: snap.m.percentPlanned,
+        percentComplete: snap.m.percentComplete,
+        percentSpent: snap.m.percentSpent,
+        baselineFinish: snap.dates.baselineFinish,
+        forecastFinish: snap.dates.forecastFinish,
+        slipDays: snap.dates.slipDays,
       };
     } catch {
-      return { pct: null, period: '', position: '', spi: '—', cpi: '—' };
+      return { pct: null, period: '', position: '', spi: '—', cpi: '—',
+               eac: 0, vac: 0, percentPlanned: 0, percentComplete: 0, percentSpent: 0,
+               baselineFinish: '', forecastFinish: '', slipDays: 0 };
     }
   }, [project, lang]);
+
   /** The percent the whole screen quotes — earned when measurable, the
    *  stored record otherwise (legacy), so summaries never blank out. */
   const progressPct = evmProgress.pct ?? project.progress;
@@ -221,6 +233,38 @@ export default function OverviewModule({
    * passed, so an omitted argument silently invented a unit.
    */
   const ccy = computed.reportingCurrency;
+
+  /**
+   * THE UNIFIED MONTHLY REPORT'S CONTEXT (owner rule): one document for
+   * management and the owner — EVM, cash, certificates and time under
+   * one cover. Every figure comes from the same engines the screens
+   * read; nothing is recomputed here beyond the totals those screens
+   * already print.
+   */
+  const monthlyCtx = useMemo(() => {
+    const cashRows = readJson<any[]>(`pactum-cashflow-${project.id}`, []);
+    const cashCum = cashCumulativeTable(
+      cashRows.slice().sort((a: any, b: any) => String(a.month).localeCompare(String(b.month))));
+    const totalIn = cashRows.reduce((a: number, r: any) => a + (Number(r.in) || 0), 0);
+    const totalOut = cashRows.reduce((a: number, r: any) => a + (Number(r.out) || 0), 0);
+    const certRows = readJson<any[]>(`pactum-certs-${project.id}`, []);
+    const certs = certRows.reduce(
+      (a, r) => ({
+        gross: a.gross + (Number(r.gross) || 0),
+        retention: a.retention + (Number(r.retention) || 0),
+        net: a.net + (Number(r.net) || 0),
+      }),
+      { gross: 0, retention: 0, net: 0 },
+    );
+    const delayRows = readJson<any[]>(`pactum-delays-${project.id}`, []);
+    return {
+      project, reportCurrency: ccy,
+      evm: { ...evmProgress },
+      cash: { rows: cashRows, cum: cashCum, totalIn, totalOut, netFlow: totalIn - totalOut },
+      certs: { rows: certRows, certified: certs.gross, retention: certs.retention, net: certs.net },
+      delay: { currentDelay: computed.currentDelay, approvedEOT: computed.totalApprovedEOT, rows: delayRows },
+    };
+  }, [project, ccy, computed, evmProgress]);
   const contractCcy = useMemo(
     () => contractCurrencyOf(project.id, ccy),
     [project.id, ccy],
@@ -611,6 +655,14 @@ export default function OverviewModule({
                          spi: evmProgress.spi,
                          cpi: evmProgress.cpi,
                        } }}
+          />
+          {/* THE UNIFIED MONTHLY REPORT — EVM + cash + certificates +
+              time under one cover, for management and the owner. */}
+          <ReportButton
+            reportId="monthly-report"
+            context={monthlyCtx}
+            label={lang === 'ar' ? 'التقرير الشهري الموحّد' : 'Monthly Report'}
+            variant="primary"
           />
         </div>
         {/*

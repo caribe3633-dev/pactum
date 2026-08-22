@@ -4354,3 +4354,218 @@ registerReport<any>({
     };
   },
 });
+
+// ══ 20 · UNIFIED MONTHLY REPORT ═══════════════════════════════════════
+// One document for management and the owner: EVM position, cash,
+// certificates and time — the four questions every monthly meeting asks,
+// answered under one cover instead of four separate prints (owner rule).
+
+registerReport<Ctx & { evm?: any; cash?: any; certs?: any; delay?: any }>({
+  id: 'monthly-report',
+  label: 'Monthly Report (Unified)',
+  labelAr: 'التقرير الشهري الموحّد',
+  scope: 'Project',
+  build: (ctx, m) => {
+    const e = (ctx.evm ?? {}) as Record<string, any>;
+    const cash = (ctx.cash ?? {}) as Record<string, any>;
+    const certs = (ctx.certs ?? {}) as Record<string, any>;
+    const delay = (ctx.delay ?? {}) as Record<string, any>;
+    const idx = (v: unknown) => (v === null || v === undefined ? '—' : Number(v).toFixed(3));
+    const sections: Section[] = [];
+
+    // Executive summary assembled from the very numbers below it.
+    const summary = L(m,
+      'Position ' + String(e.quadrant ?? '—') + ' · SPI ' + idx(e.spi) + ' · CPI ' + idx(e.cpi) +
+      '. Cash net ' + money(cash.netFlow) + '. Certificates certified to date ' + money(certs.certified) +
+      '. Current delay ' + (delay.currentDelay ?? 0) + ' days against ' + (delay.approvedEOT ?? 0) + ' approved EOT days.',
+      'الموقف ' + String(e.quadrant ?? '—') + ' · SPI ' + idx(e.spi) + ' · CPI ' + idx(e.cpi) +
+      '. صافي النقدية ' + money(cash.netFlow) + '. إجمالي المستخلصات ' + money(certs.certified) +
+      '. التأخير الحالي ' + (delay.currentDelay ?? 0) + ' يوماً مقابل ' + (delay.approvedEOT ?? 0) + ' يوم تمديد معتمد.');
+    sections.push({ kind: 'summary', title: L(m, 'Executive Summary', 'الملخص التنفيذي'), text: summary });
+
+    if (e.period !== undefined || e.spi !== undefined) {
+      sections.push({ kind: 'kpi', title: L(m, 'Earned Value Position', 'موقف القيمة المكتسبة'), columns: 3, items: [
+        { label: L(m, 'Position', 'الموقف'), value: String(e.quadrant ?? '—'), tone: 'gold' },
+        { label: 'SPI', value: idx(e.spi) },
+        { label: 'CPI', value: idx(e.cpi) },
+        { label: L(m, 'Progress (EV ÷ BAC)', 'التقدم (EV ÷ BAC)'), value: percent(e.progressPct) },
+        { label: 'EAC', value: money(e.eac), unit: unit(ctx) },
+        { label: 'VAC', value: money(e.vac), unit: unit(ctx), tone: (Number(e.vac) || 0) < 0 ? 'risk' : 'ok' },
+      ]});
+      sections.push({ kind: 'bars', title: L(m, 'Budget Consumption', 'استهلاك الموازنة'), items: [
+        { label: 'PV', ratio: Number(e.percentPlanned) || 0, value: percent(e.percentPlanned) },
+        { label: 'EV', ratio: Number(e.percentComplete) || 0, value: percent(e.percentComplete), tone: 'gold' },
+        { label: 'AC', ratio: Number(e.percentSpent) || 0, value: percent(e.percentSpent),
+          tone: (Number(e.percentSpent) || 0) > (Number(e.percentComplete) || 0) ? 'risk' : 'ok' },
+      ]});
+      sections.push({ kind: 'info', title: L(m, 'Time Forecast', 'التوقع الزمني'), columns: 3, items: [
+        { label: L(m, 'Baseline Finish', 'إنجاز الأساس'), value: reportDate(e.baselineFinish, m.lang) },
+        { label: L(m, 'Forecast Finish', 'الإنجاز المتوقع'), value: reportDate(e.forecastFinish, m.lang),
+          tone: (Number(e.slipDays) || 0) > 0 ? 'risk' : 'ok' },
+        { label: L(m, 'Slippage', 'الانزلاق'), value: days(e.slipDays) },
+      ]});
+    }
+
+    if (Array.isArray(cash.cum) && cash.cum.length) {
+      sections.push({ kind: 'kpi', title: L(m, 'Cash Position', 'الموقف النقدي'), columns: 3, items: [
+        { label: L(m, 'Cash In', 'نقدية داخل'), value: money(cash.totalIn), unit: unit(ctx), tone: 'ok' },
+        { label: L(m, 'Cash Out', 'نقدية خارج'), value: money(cash.totalOut), unit: unit(ctx), tone: 'risk' },
+        { label: L(m, 'Net', 'الصافي'), value: money(cash.netFlow), unit: unit(ctx), tone: 'gold' },
+      ]});
+      sections.push({ kind: 'table', title: L(m, 'Cash — Cumulative by Period', 'النقدية — التراكمي لكل فترة'),
+        columns: [
+          { key: 'month', label: L(m, 'Month', 'الفترة') },
+          { key: 'in', label: L(m, 'Cash In', 'وارد'), money: true },
+          { key: 'out', label: L(m, 'Cash Out', 'صادر'), money: true },
+          { key: 'variance', label: L(m, 'Cum. Variance', 'الانحراف التراكمي'), money: true },
+          { key: 'net', label: L(m, 'Cumulative Net', 'الصافي التراكمي'), money: true },
+        ],
+        rows: (cash.cum as any[]).map((r: any) => {
+          const src = (cash.rows as any[] | undefined)?.find(x => x.month === r.month) ?? {};
+          return {
+            month: r.month,
+            in: Number(src.in) || 0,
+            out: Number(src.out) || 0,
+            variance: r.variance,
+            net: r.cumNet,
+          };
+        }),
+      });
+    }
+
+    if (Array.isArray(certs.rows) && certs.rows.length) {
+      sections.push({ kind: 'kpi', title: L(m, 'Certificates', 'المستخلصات'), columns: 3, items: [
+        { label: L(m, 'Certified to Date', 'معتمد حتى تاريخه'), value: money(certs.certified), unit: unit(ctx) },
+        { label: L(m, 'Retention', 'المحتجزات'), value: money(certs.retention), unit: unit(ctx) },
+        { label: L(m, 'Net', 'الصافي'), value: money(certs.net), unit: unit(ctx), tone: 'gold' },
+      ]});
+      sections.push({ kind: 'table', title: L(m, 'Certificate Register', 'سجل المستخلصات'),
+        columns: [
+          { key: 'no', label: L(m, 'No.', 'م') },
+          { key: 'period', label: L(m, 'Period', 'الفترة') },
+          { key: 'gross', label: L(m, 'Gross', 'الإجمالي'), money: true },
+          { key: 'retention', label: L(m, 'Retention', 'المحتجزات'), money: true },
+          { key: 'net', label: L(m, 'Net', 'الصافي'), money: true },
+          { key: 'status', label: L(m, 'Status', 'الحالة') },
+        ],
+        rows: certs.rows,
+      });
+    }
+
+    sections.push({ kind: 'kpi', title: L(m, 'Time & Delay', 'الزمن والتأخير'), columns: 3, items: [
+      { label: L(m, 'Current Delay', 'التأخير الحالي'), value: delay.currentDelay ?? 0, unit: 'DAYS',
+        tone: (Number(delay.currentDelay) || 0) > 0 ? 'risk' : 'ok' },
+      { label: L(m, 'Approved EOT', 'تمديد معتمد'), value: delay.approvedEOT ?? 0, unit: 'DAYS', tone: 'gold' },
+      { label: L(m, 'Delay Register', 'سجل التأخير'), value: String(Array.isArray(delay.rows) ? delay.rows.length : 0) },
+    ]});
+
+    sections.push(sig(['Project Manager', 'Commercial Manager', 'Owner Representative']));
+
+    return {
+      meta: meta(ctx, m, 'Monthly Report', 'Unified — EVM · Cash · Certificates · Time'),
+      page: A4, cover: true, toc: true, sections,
+    };
+  },
+});
+
+// ══ 21 · CLAIM DETAIL SHEET ═══════════════════════════════════════════
+// One sheet per claim, for negotiation and litigation: the full record
+// of the item — amounts, dates, currency facts and its document link —
+// not a one-line row in a summary register (owner rule).
+
+registerReport<Ctx & { item?: any }>({
+  id: 'claim-detail',
+  label: 'Claim Sheet',
+  labelAr: 'ورقة مطالبة',
+  scope: 'Row',
+  build: (ctx, m) => {
+    const it = (ctx.item ?? null) as Record<string, any> | null;
+    if (!it) {
+      return {
+        meta: meta(ctx, m, 'Claim Sheet', ''),
+        page: A4,
+        sections: [{ kind: 'appendix', title: 'Note',
+          text: 'Open this sheet from the claim row in the Claims register.' }],
+      };
+    }
+    const unresolved = (Number(it.claimed) || 0) - (Number(it.settled) || 0);
+    return {
+      meta: meta(ctx, m, 'Claim Sheet — ' + String(it.no ?? ''), ''),
+      page: A4, cover: false,
+      sections: [
+        { kind: 'info', title: L(m, 'Claim', 'المطالبة'), columns: 4, items: [
+          { label: L(m, 'Reference', 'الرقم المرجعي'), value: String(it.no ?? '—') },
+          { label: L(m, 'Type', 'النوع'), value: String(it.type ?? '—') },
+          { label: L(m, 'Status', 'الحالة'), value: String(it.status ?? '—'),
+            tone: it.status === 'approved' ? 'ok' : it.status === 'rejected' ? 'risk' : 'default' },
+          { label: L(m, 'Claim Date', 'تاريخ المطالبة'), value: reportDate(it.date, m.lang) },
+        ]},
+        { kind: 'kpi', title: L(m, 'Amounts', 'المبالغ'), columns: 3, items: [
+          { label: L(m, 'Claimed', 'المطلوب'), value: money(it.claimed), unit: unit(ctx) },
+          { label: L(m, 'Settled', 'المستقر'), value: money(it.settled), unit: unit(ctx), tone: 'gold' },
+          { label: L(m, 'Unresolved', 'غير المستقر'), value: money(unresolved), unit: unit(ctx),
+            tone: unresolved > 0 ? 'risk' : 'ok' },
+          { label: L(m, 'Time Claimed', 'المدة المطلوبة'), value: days(it.timeDays),
+            tone: (Number(it.timeDays) || 0) > 0 ? 'gold' : 'default' },
+        ]},
+        { kind: 'info', title: L(m, 'Key Dates & Currency', 'التواريخ العملة'), columns: 3, items: [
+          { label: L(m, 'EOT Effective Date', 'تاريخ سريان التمديد'), value: reportDate(it.eotApprovedAt, m.lang) },
+          { label: L(m, 'Transaction Date', 'تاريخ المعاملة'), value: reportDate(it.transactionDate, m.lang) },
+          { label: L(m, 'Rate Effective', 'سريان السعر'), value: reportDate(it.rateEffectiveDate, m.lang) },
+          ...(it.currency ? [{ label: L(m, 'Entered Currency', 'عملة الإدخال'), value: String(it.currency) }] : []),
+          ...(it.exchangeRate ? [{ label: L(m, 'Rate', 'السعر'), value: String(it.exchangeRate) }] : []),
+        ]},
+        { kind: "info", title: L(m, "Supporting Document", "المستند الداعم"), columns: 2, items: [
+          { label: L(m, 'External Link', 'رابط خارجي'),
+            value: it.documentUrl ? String(it.documentUrl) : L(m, 'None on record', 'لا يوجد') },
+        ]},
+        sig(['Claimant Representative', 'Commercial Manager']),
+      ],
+    };
+  },
+});
+
+// ══ 22 · CHANGE ORDER DETAIL SHEET ════════════════════════════════════
+
+registerReport<Ctx & { item?: any }>({
+  id: 'co-detail',
+  label: 'Change Order Sheet',
+  labelAr: 'ورقة أمر تغيير',
+  scope: 'Row',
+  build: (ctx, m) => {
+    const it = (ctx.item ?? null) as Record<string, any> | null;
+    if (!it) {
+      return {
+        meta: meta(ctx, m, 'Change Order Sheet', ''),
+        page: A4,
+        sections: [{ kind: 'appendix', title: 'Note',
+          text: 'Open this sheet from the order row in the Change Orders register.' }],
+      };
+    }
+    return {
+      meta: meta(ctx, m, 'Change Order Sheet — ' + String(it.no ?? ''), ''),
+      page: A4, cover: false,
+      sections: [
+        { kind: 'info', title: L(m, 'Change Order', 'أمر التغيير'), columns: 4, items: [
+          { label: L(m, 'Reference', 'الرقم المرجعي'), value: String(it.no ?? '—') },
+          { label: L(m, 'Status', 'الحالة'), value: String(it.status ?? '—'),
+            tone: it.status === 'approved' ? 'ok' : it.status === 'rejected' ? 'risk' : 'default' },
+          { label: L(m, 'Order Date', 'تاريخ الأمر'), value: reportDate(it.date, m.lang) },
+          { label: L(m, 'EOT Effective Date', 'تاريخ سريان التمديد'), value: reportDate(it.eotApprovedAt, m.lang) },
+        ]},
+        { kind: 'kpi', title: L(m, 'Value & Time', 'القيمة والمدة'), columns: 2, items: [
+          { label: L(m, 'Order Value', 'قيمة الأمر'), value: money(it.value), unit: unit(ctx), tone: 'gold' },
+          { label: L(m, 'Time Granted', 'المدة الممنوحة'), value: days(it.time),
+            tone: (Number(it.time) || 0) > 0 ? 'gold' : 'default' },
+        ]},
+        { kind: 'summary', title: L(m, 'Scope', 'النطاق'),
+          text: String(it.desc ?? '—') },
+        { kind: "info", title: L(m, "Supporting Document", "المستند الداعم"), columns: 2, items: [
+          { label: L(m, 'External Link', 'رابط خارجي'),
+            value: it.documentUrl ? String(it.documentUrl) : L(m, 'None on record', 'لا يوجد') },
+        ]},
+        sig(['Project Manager', 'Commercial Manager']),
+      ],
+    };
+  },
+});

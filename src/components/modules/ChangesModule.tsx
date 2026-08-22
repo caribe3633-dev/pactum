@@ -673,7 +673,12 @@ export default function ChangesModule({ project, canEdit = true }: { project: Pr
                   </td>
                   {canEdit && (
                     <td className="col-act">
-                      <button onClick={() => handleDelete(i)} aria-label={lang === 'ar' ? 'حذف' : 'Delete'} className="text-muted-foreground hover:text-destructive transition-colors p-1.5"><Trash2 className="w-4 h-4" /></button>
+                      <span className="inline-flex items-center gap-0.5">
+                        <ReportButton reportId="co-detail" size="sm" label=""
+                          context={{ project, item: row, reportCurrency: money.base }}
+                        />
+                        <button onClick={() => handleDelete(i)} aria-label={lang === 'ar' ? 'حذف' : 'Delete'} className="text-muted-foreground hover:text-destructive transition-colors p-1.5"><Trash2 className="w-4 h-4" /></button>
+                      </span>
                     </td>
                   )}
                 </tr>
