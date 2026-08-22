@@ -105,7 +105,7 @@ type Tab = 'dashboard' | 'matrix' | 'periods' | 'forecast' | 'baseline';
 const TABS: { id: Tab; icon: any; en: string; ar: string }[] = [
   { id: 'dashboard', icon: Activity,       en: 'Dashboard',   ar: 'اللوحة' },
   { id: 'matrix',    icon: Grid3x3,        en: 'Matrix',      ar: 'المصفوفة' },
-  { id: 'periods',   icon: ClipboardCheck, en: 'Periods',     ar: 'الفترات' },
+  { id: 'periods',   icon: ClipboardCheck, en: 'Tables',     ar: 'جداول' },
   { id: 'forecast',  icon: TrendingUp,     en: 'Forecast',    ar: 'التوقعات' },
   { id: 'baseline',  icon: Layers,         en: 'Baseline',    ar: 'الأساس' },
 ];
@@ -1787,6 +1787,25 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                   </React.Fragment>
                 );
               })}
+              {/* CLASS TOTAL — Direct and Indirect lenses only (owner
+                  rule): the whole-history sums of the class you are
+                  looking at, stated once at the foot. The Total lens
+                  shows cumulative figures per row already. */}
+              {lens !== 'total' && store.periods.length > 0 && bacSplit.available && (() => {
+                const cm = classMetrics(store.periods, store.periods[store.periods.length - 1], bacSplit, store.settings.eacMethod);
+                const c = lens === 'direct' ? cm.direct : cm.indirect;
+                return (
+                  <tr className="border-t-2 border-primary/30 font-semibold">
+                    <td className="col-pin text-primary uppercase tracking-wider">
+                      {isRtl ? 'الإجمالي' : 'Total'}
+                    </td>
+                    <td className="money">{formatMoney(c.pv, { currency: ccy })}</td>
+                    <td className="money">{formatMoney(c.ev, { currency: ccy })}</td>
+                    <td className="money">{formatMoney(c.ac, { currency: ccy })}</td>
+                    <td colSpan={4} />
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>

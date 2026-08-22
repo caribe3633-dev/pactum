@@ -570,6 +570,28 @@ export default function BudgetModule({ project, canEdit = true }:
                 </tr>
                 );
               })}
+              {/* TOTAL — after the last line (owner rule). Same rows the
+                  table prints, summed once at the foot. */}
+              {data.length > 0 && (() => {
+                const tot = chartData.reduce(
+                  (a, r) => ({ planned: a.planned + r.planned, actual: a.actual + r.actual, remaining: a.remaining + r.remaining }),
+                  { planned: 0, actual: 0, remaining: 0 },
+                );
+                return (
+                  <tr className="border-t-2 border-primary/30 font-semibold">
+                    <td className="col-pin text-primary uppercase tracking-wider">
+                      {isRtl ? 'الإجمالي' : 'Total'}
+                    </td>
+                    <td />
+                    <td className="money">{formatMoney(tot.planned, { currency: money.base })}</td>
+                    <td className="money">{formatMoney(tot.actual, { currency: money.base })}</td>
+                    <td className={cn('money', tot.remaining >= 0 ? 'money-pos' : 'money-neg')}>
+                      {formatMoney(tot.remaining, { currency: money.base })}
+                    </td>
+                    <td className="col-act" />
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>

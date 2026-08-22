@@ -1,1 +1,1 @@
-Budget module now has Tables and Dashboard tabs. Dashboard charts: Planned vs Actual paired bars per budget line (grey plan beside gold actual, values on the bars), a Spent vs Remaining donut with the spent percentage in the hole, and a Direct vs Indirect budget split pie. Tables keeps the ledger and everything else unchanged
+Total rows at the foot of the Cash Flow Periods ledger and the Budget Tables ledger. The EVM Periods tab is renamed Tables (جداول), and its Direct and Indirect lenses each close with a class total (PV/EV/AC whole-history sums)
