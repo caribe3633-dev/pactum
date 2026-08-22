@@ -3,7 +3,7 @@ import { useProjects, useAuth, getProjectPermission } from '../lib/store';
 import { useTranslation } from '../lib/i18n';
 import { formatCompactNumber, formatPercent, cn } from '../lib/utils';
 import {
-  ClipboardList, Wallet, Landmark, Gauge, Clock,
+  ClipboardList, Wallet, Landmark, Gauge, Clock, Scale,
   FileWarning, FileText, ShieldAlert, Receipt, HardHat, Archive, Layers, BookOpen, FileSignature,
 } from 'lucide-react';
 import { findCompanyById } from '../mock/companies';
@@ -16,6 +16,8 @@ import ContractModule from '../components/modules/ContractModule';
 import CashFlowModule from '../components/modules/CashFlowModule';
 import BudgetModule from '../components/modules/BudgetModule';
 import EVMModule from '../components/modules/EVMModule';
+// CVR — the margin view, its own project tab between EV and Delay.
+import CVRModule from '../components/modules/CVRModule';
 import TimelineModule from '../components/modules/TimelineModule';
 import BaselineModule from '../components/modules/BaselineModule';
 import ReportsModule from '../components/modules/ReportsModule';
@@ -42,6 +44,7 @@ const TABS = [
   { id: 'cashflow',  icon: Wallet,         en: 'Cash Flow',          ar: 'التدفق النقدي' },
   { id: 'budget',    icon: Landmark,       en: 'Budget',             ar: 'الموازنة' },
   { id: 'evm',       icon: Gauge,          en: 'Earned Value',       ar: 'القيمة المكتسبة' },
+  { id: 'cvr',       icon: Scale,          en: 'CVR',                ar: 'تسوية القيمة والتكلفة' },
   { id: 'delay',     icon: Clock,          en: 'Delay Analysis',     ar: 'تحليل التأخير' },
   { id: 'changes',   icon: FileWarning,    en: 'Change Orders',      ar: 'أوامر التغيير' },
   { id: 'claims',    icon: FileText,       en: 'Claims',             ar: 'المطالبات' },
@@ -184,6 +187,7 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
       case 'cashflow':  return <CashFlowModule  {...props} />;
       case 'budget':    return <BudgetModule    {...props} />;
       case 'evm':       return <EVMModule       {...props} />;
+      case 'cvr':       return <CVRModule       {...props} />;
       case 'delay':     return <DelayModule     {...props} />;
       case 'changes':   return <ChangesModule   {...props} />;
       case 'claims':    return <ClaimsModule    {...props} />;

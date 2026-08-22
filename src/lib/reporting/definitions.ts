@@ -4569,3 +4569,82 @@ registerReport<Ctx & { item?: any }>({
     };
   },
 });
+
+// ══ 23 · CVR — COST VALUE RECONCILIATION (the margin view) ════════════════
+// Exported from the CVR project tab. Every figure arrives in ctx.cvr from
+// the module, which derives it from lib/evm.ts — the report never computes.
+
+registerReport<Ctx & { cvr?: any }>({
+  id: 'cvr',
+  label: 'CVR — Cost Value Reconciliation',
+  labelAr: 'تسوية القيمة والتكلفة',
+  scope: 'Project',
+  build: (ctx, m) => {
+    const c = ctx.cvr;
+    if (!c) {
+      return {
+        meta: meta(ctx, m, 'CVR — Cost Value Reconciliation', ''),
+        page: A4,
+        sections: [{ kind: 'appendix', title: 'Note',
+          text: 'Open this report from the CVR tab of the project.' }],
+      };
+    }
+    const pct = (v: any) => v === null || v === undefined ? '—'
+      : `${(Number(v) * 100).toFixed(1)}%`;
+    const dash = (v: any) => v === null || v === undefined ? '—' : v;
+    return {
+      meta: meta(ctx, m, 'CVR — Cost Value Reconciliation', ''),
+      page: A4, cover: false,
+      sections: [
+        { kind: 'kpi', title: L(m, 'Profit Position', 'موقف الربح'), columns: 4, items: [
+          { label: L(m, 'Planned Margin', 'هامش مخطط'), value: pct(c.plannedMarginPct), tone: 'gold' },
+          { label: L(m, 'Planned Profit', 'ربح مخطط'), value: money(c.plannedProfit), unit: unit(ctx), tone: 'gold' },
+          { label: L(m, 'Expected Margin', 'هامش متوقع'), value: pct(c.expectedMarginPct),
+            tone: Number(c.expectedProfit) >= 0 ? 'ok' : 'risk' },
+          { label: L(m, 'Expected Profit', 'ربح متوقع'), value: money(c.expectedProfit), unit: unit(ctx),
+            tone: Number(c.expectedProfit) >= 0 ? 'ok' : 'risk' },
+        ]},
+        { kind: 'info', title: L(m, 'Contract Amount (CA) Anatomy', 'مكونات قيمة العقد (CA)'), columns: 4, items: [
+          { label: L(m, 'Contract Value', 'قيمة العقد'),
+            value: money(c.contractAmount - c.approvedCos - c.settledClaims), unit: unit(ctx) },
+          { label: L(m, 'Approved COs', 'أوامل معتمدة'),
+            value: money(c.approvedCos), unit: unit(ctx), tone: 'ok' },
+          { label: L(m, 'Settled Claims', 'مطالبات مسوّاة'),
+            value: money(c.settledClaims), unit: unit(ctx), tone: 'ok' },
+          { label: L(m, 'Unapproved COs (excluded)', 'أوامل غير معتمدة (مستبعدة)'),
+            value: money(c.pendingCos), unit: unit(ctx) },
+        ]},
+        { kind: 'summary', title: L(m, 'Method', 'المنهجية'),
+          text: L(m,
+            'Only approved change orders and settled claims enter CA, linking themselves the day they are approved; BAC moves by the same amount so the planned margin stays frozen with the baseline. The expected profit is CA − EAC at the official signed forecast method and moves with every approved period. Expected − planned = VAC.',
+            'المعتمد فقط من أوامل التغيير والمطالبات المسوّاة يدخل قيمة العقد، ويرتبط تلقائيًا يوم الاعتماد؛ وBAC يتحرك بنفس القيمة فيبقى الهامش المخطط مجمدًا مع خط الأساس. والربح المتوقع = CA − EAC بالطريقة الرسمية الموقّعة، ويتحرك مع كل مدة معتمدة. المتوقع − المخطط = VAC.') },
+        { kind: 'table', title: L(m, 'Monthly Reconciliation', 'التسوية الشهرية'),
+          columns: [
+            { key: 'label', label: L(m, 'Period', 'الفترة'), width: 13 },
+            { key: 'pv', label: 'PV', money: true, width: 11 },
+            { key: 'pctPlanned', label: L(m, '% Planned', '% مخطط'), width: 9 },
+            { key: 'plannedCvr', label: L(m, 'Planned CVR', 'CVR مخطط'), money: true, width: 12 },
+            { key: 'ev', label: 'EV', money: true, width: 11 },
+            { key: 'pctProgress', label: L(m, '% Earned', '% منجز'), width: 9 },
+            { key: 'cvr', label: 'CVR', money: true, width: 12 },
+            { key: 'delta', label: 'Δ', money: true, width: 10 },
+            { key: 'status', label: L(m, 'Status', 'الحالة'), status: true, width: 9 },
+          ],
+          rows: (c.rows ?? []).map((r: any) => ({
+            label: r.label,
+            pv: dash(r.pv),
+            pctPlanned: pct(r.pctPlanned),
+            plannedCvr: dash(r.plannedCvr),
+            ev: dash(r.ev),
+            pctProgress: pct(r.pctProgress),
+            cvr: dash(r.cvr),
+            delta: r.cvr === null || r.cvr === undefined ? '—' : r.cvr - (r.plannedCvr ?? 0),
+            status: r.status ?? '—',
+          })) },
+        { kind: 'summary', title: L(m, 'Equations', 'المعادلات'),
+          text: 'Planned CVR = (PV ÷ BAC) × (CA − BAC)   ·   CVR = (EV ÷ BAC) × (CA − BAC)   ·   Expected profit = CA − EAC   ·   At 100% both curves close on CA − BAC' },
+        sig(['Project Manager', 'Commercial Manager']),
+      ],
+    };
+  },
+});
