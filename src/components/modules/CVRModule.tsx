@@ -98,42 +98,37 @@ export default function CVRModule({ project }: { project: Project; canEdit?: boo
           .reduce((a: number, r: any) => a + (Number(r.value) || 0), 0);
       }
     } catch { /* register absent — nothing pending */ }
-    /* ── THE DIRECT BASIS (owner rule) ─────────────────────────────
-     * %Progress        = EV(t) DIRECT ÷ BAC DIRECT
-     * %Progress Planned = PV(t) DIRECT ÷ BAC DIRECT
-     * EVM is measured on direct cost — so is the CVR progress. The direct
-     * half of a period is (total − indirect) where the split was recorded;
-     * BAC direct comes from the approved Baseline Package. When either is
-     * missing the tab does NOT fake the direct basis: it falls back to
-     * totals and says so, because a wrong denominator is worse than a
-     * stated approximation. */
+    /* ── THE DIRECT BASIS (owner rule), CUMULATIVE ─────────────────────
+     * %Progress Planned = cumDirectPV(t) ÷ direct BAC
+     * %Progress         = cumDirectEV(t) ÷ direct BAC
+     * EVM is direct-cost only, so the CVR progress is too. THE CLASS
+     * SPLIT FIELDS ARE PER-PERIOD, while pv/ev are stored cumulative —
+     * so the direct curve is built by ACCUMULATING the components over
+     * history, exactly the summation `classMetrics` runs for the EVM
+     * class table. Same numbers as the screens, cumulative by
+     * construction. Direct BAC comes from the approved Baseline
+     * Package; without one there IS no direct BAC and the tab falls
+     * back to totals, saying so — never dividing by a wrong
+     * denominator. */
     const split = computeBacSplit(project, store.settings);
     const bD = split.available ? split.directBac : null;
+    const useDirect = bD !== null && bD > 0;
+    const denom = useDirect ? (bD as number) : bac;
     const periods = store.periods;
     const aligned = periods.length === points.length;
-    const directOf = (idx: number, total: number | null, field: 'indirectPv' | 'indirectEv'): number | null => {
-      if (!aligned) return null;
-      const per = periods[idx];
-      const ind = per ? per[field] : undefined;
-      if (ind === undefined || total === null) return null;
-      return total - ind;
-    };
-    const preRows = points.map((p, idx) => {
+    const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+    let cumPvD = 0, cumEvD = 0;
+    const rows = points.map((p, idx) => {
       /* series() nulls EV on periods with no actuals — they stay '—' here. */
       const ev = p.ev as number | null;
-      const pvD = directOf(idx, p.pv, 'indirectPv');
-      const evD = ev === null ? null : directOf(idx, ev, 'indirectEv');
-      return { p, ev, pvD, evD };
-    });
-    /* One basis for the whole curve, never a mix. Direct is used only when
-     * BAC direct exists AND every plotted period carries the split. */
-    const useDirect = bD !== null && bD > 0
-      && preRows.every(r => r.pvD !== null)
-      && preRows.filter(r => r.ev !== null).every(r => r.evD !== null);
-    const denom = useDirect ? (bD as number) : bac;
-    const rows = preRows.map(({ p, ev, pvD, evD }) => {
-      const pvShown = useDirect ? (pvD as number) : p.pv;
-      const evShown = useDirect && evD !== null ? evD : ev;
+      const per = aligned ? periods[idx] : undefined;
+      if (per) {
+        /* Per-period components accumulated — never total − indirect. */
+        cumPvD += num(per.directPv);
+        cumEvD += num(per.directEv);
+      }
+      const pvShown = useDirect ? cumPvD : p.pv;
+      const evShown = ev === null ? null : (useDirect ? cumEvD : ev);
       const pctPlanned = denom > 0 ? pvShown / denom : null;
       const pctProgress = evShown === null || denom <= 0 ? null : evShown / denom;
       return {
@@ -147,11 +142,11 @@ export default function CVRModule({ project }: { project: Project; canEdit?: boo
     });
     const basisNote = useDirect
       ? (isRtl
-          ? `الأساس: مباشر — EV المباشر ÷ BAC المباشر (${fmtShort(denom)})`
-          : `Basis: DIRECT — direct EV ÷ direct BAC (${fmtShort(denom)})`)
+          ? `الأساس: مباشر تراكمي — EV المباشر التراكمي ÷ BAC المباشر (${fmtShort(denom)})`
+          : `Basis: DIRECT cumulative — cumulative direct EV ÷ direct BAC (${fmtShort(denom)})`)
       : (isRtl
-          ? 'الأساس: إجمالي مؤقتًا — يتطلب موازنة معتمدة (باك بفصل الفئات) وفترات مفصولة مباشر/غير مباشر'
-          : 'Basis: TOTAL for now — needs an approved package (split BAC) and periods carrying the direct/indirect split');
+          ? 'الأساس: إجمالي مؤقتًا — يتطلب اعتماد باك بفصل الفئات (مباشر/غير مباشر) ليوجد BAC مباشر'
+          : 'Basis: TOTAL for now — approve a split Baseline Package (direct/indirect) for a direct BAC to exist');
     return {
       contractAmount, approvedCos: ca.cos, settledClaims: ca.claims, pendingCos,
       plannedProfit, expectedProfit, plannedMarginPct, expectedMarginPct,
