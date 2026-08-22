@@ -1575,56 +1575,6 @@ export function transition(
 
 // ── Separate class approvals ───────────────────────────────────────────
 
-/**
- * PER-PERIOD INCREMENTS for the Periods view (owner rule): that table
- * shows what each period ADDS, never the running total. A split row
- * answers from its Direct + Indirect components; a legacy no-split row
- * answers as the difference between consecutive cumulative values.
- */
-export interface PeriodIncrement { id: string; pv: number; ev: number; ac: number; }
-
-export function periodIncrements(periods: EvmPeriod[]): Map<string, PeriodIncrement> {
-  const out = new Map<string, PeriodIncrement>();
-  periods.forEach((p, i) => {
-    const split = p.directPv !== undefined || p.directEv !== undefined || p.directAc !== undefined
-               || p.indirectPv !== undefined || p.indirectEv !== undefined || p.indirectAc !== undefined;
-    if (split) {
-      out.set(p.id, {
-        id: p.id,
-        pv: (p.directPv ?? 0) + (p.indirectPv ?? 0),
-        ev: (p.directEv ?? 0) + (p.indirectEv ?? 0),
-        ac: (p.directAc ?? 0) + (p.indirectAc ?? 0),
-      });
-    } else {
-      const prev = i > 0 ? periods[i - 1] : null;
-      out.set(p.id, {
-        id: p.id,
-        pv: p.pv - (prev?.pv ?? 0),
-        ev: p.ev - (prev?.ev ?? 0),
-        ac: p.ac - (prev?.ac ?? 0),
-      });
-    }
-  });
-  return out;
-}
-
-/**
- * CUMULATIVE PER CLASS for the Cumulative tab's class lenses: running
- * sums of one class's components, oldest → newest. Rows before the
- * split existed contribute zero — they predate the class, honestly.
- */
-export interface ClassCumRow { id: string; label: string; pv: number; ev: number; ac: number; }
-
-export function classCumulative(periods: EvmPeriod[], cls: 'direct' | 'indirect'): ClassCumRow[] {
-  let pv = 0, ev = 0, ac = 0;
-  return periods.map(p => {
-    pv += num(cls === 'direct' ? p.directPv : p.indirectPv);
-    ev += num(cls === 'direct' ? p.directEv : p.indirectEv);
-    ac += num(cls === 'direct' ? p.directAc : p.indirectAc);
-    return { id: p.id, label: p.label, pv, ev, ac };
-  });
-}
-
 export type CostClass = 'direct' | 'indirect';
 
 /** True when THIS class of the period is approved on its own. */

@@ -30,7 +30,6 @@ import {
   EvmStore, EvmPeriod, PeriodStatus, Cadence, EvmSnapshot,
   // ── Refinement additions ──
   periodMetrics, cumulativeTo, eacComparison, EAC_META, EacMethod, EacOption, latestApproved,
-  periodIncrements, classCumulative,
   classifyHealth, HealthVerdict, activeBaseline, rebaseline, seedBaseline,
   generateFuturePeriods, redistributePv, effectiveBounds,
   CADENCE_META, REBASELINE_CAUSES, RebaselineCause, Baseline,
@@ -96,12 +95,9 @@ type Tab = 'dashboard' | 'scurve' | 'matrix' | 'periods' | 'trend' | 'forecast' 
 
 const TABS: { id: Tab; icon: any; en: string; ar: string }[] = [
   { id: 'dashboard', icon: Activity,       en: 'Dashboard',   ar: 'اللوحة' },
-  { id: 'periods',   icon: ClipboardCheck, en: 'Periods',     ar: 'الفترات' },
-  // The Cumulative tab — the S-curve relabelled and seated BESIDE
-  // Periods (owner rule): entry on one tab, the automatic cumulative
-  // views + their chart on the other. Chart and table tell one story.
-  { id: 'scurve',    icon: TrendingUp,     en: 'Cumulative',  ar: 'التراكمي' },
+  { id: 'scurve',    icon: TrendingUp,     en: 'S-Curve',     ar: 'منحنى S' },
   { id: 'matrix',    icon: Grid3x3,        en: 'Matrix',      ar: 'المصفوفة' },
+  { id: 'periods',   icon: ClipboardCheck, en: 'Periods',     ar: 'الفترات' },
   { id: 'trend',     icon: Activity,       en: 'Trend',       ar: 'الاتجاه' },
   { id: 'forecast',  icon: TrendingUp,     en: 'Forecast',    ar: 'التوقعات' },
   { id: 'baseline',  icon: Layers,         en: 'Baseline',    ar: 'الأساس' },
@@ -262,10 +258,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
   /** Long horizons lose the dots and zoom with the brush — a 5-year
    *  monthly programme draws 60 points per series. */
   const manyPeriods = points.length > 24;
-  /** PER-PERIOD INCREMENTS for the Periods table (owner rule): that
-   *  table shows what each period ADDS — the running total lives on the
-   *  Cumulative tab. */
-  const incs = useMemo(() => periodIncrements(store.periods), [store.periods]);
 
   /**
    * ══════════════════════════════════════════════════════════════════════
@@ -1011,32 +1003,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
 
       {/* ══════════════════ S-CURVE ══════════════════ */}
       {tab === 'scurve' && (
-        <>
-        {/* CUMULATIVE TAB (owner rule): the same class lens as Periods —
-            Total, Direct and Indirect — but every figure here is the
-            AUTOMATIC running position, read-only. Chart above, its table
-            below: one story told twice, never two. */}
-        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-(length:--t-label) uppercase tracking-widest text-muted-foreground">
-              {isRtl ? 'فئة التكلفة' : 'Cost Class'}
-            </span>
-            {([
-              { id: 'total',    en: 'Total',    ar: 'الإجمالي' },
-              { id: 'direct',   en: 'Direct',   ar: 'مباشرة' },
-              { id: 'indirect', en: 'Indirect', ar: 'غير مباشرة' },
-            ] as const).map(x => (
-              <button key={x.id} onClick={() => setLens(x.id)}
-                      className={cn('btn btn-sm', lens === x.id ? 'btn-primary' : 'btn-secondary')}>
-                {isRtl ? x.ar : x.en}
-              </button>
-            ))}
-            <span className="text-(length:--t-micro) uppercase tracking-widest text-muted-foreground border border-white/[0.06] px-2 py-0.5">
-              {isRtl ? 'قراءة فقط · تلقائي بالكامل' : 'READ-ONLY · FULLY AUTOMATIC'}
-            </span>
-          </div>
-        </div>
-
         <div className="ds-card ds-card-raised">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
             <h3 className="sec-head !mb-0">
@@ -1084,154 +1050,6 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
               : 'Drag the handles below the chart to zoom a window. EV and AC begin at the first period carrying data.'}
           </p>
         </div>
-
-        {/* ════════ THE TABLE THE CHART ANSWERS TO ════════ */}
-        {lens === 'total' ? (() => {
-          /** Final cumulative figures: the last stated plan and the last
-           *  EARNED figures (time is not performance — future indirect
-           *  slices never count). */
-          let lastEv = null;
-          let lastAc = null;
-          let lastSv = 0, lastCv = 0;
-          for (let i = points.length - 1; i >= 0; i--) {
-            if (lastEv === null && points[i].ev !== null) { lastEv = points[i].ev; lastSv = points[i].sv; }
-            if (lastAc === null && points[i].ac !== null) { lastAc = points[i].ac; lastCv = points[i].cv; }
-            if (lastEv !== null && lastAc !== null) break;
-          }
-          const lastPv = points.length ? points[points.length - 1].pv : 0;
-          return (
-            <div>
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-                <h3 className="sec-head !mb-0 flex-1">
-                  {isRtl ? 'الموقف التراكمي' : 'Cumulative Position'}
-                </h3>
-              </div>
-              <div className="ds-table-wrap">
-                <table className="ds-table">
-                  <thead>
-                    <tr>
-                      <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
-                      <th className="money">PV</th>
-                      <th className="money">EV</th>
-                      <th className="money">AC</th>
-                      <th className="money">SV</th>
-                      <th className="money">CV</th>
-                      <th className="money">SPI</th>
-                      <th className="money">CPI</th>
-                      <th className="money">EAC</th>
-                      <th className="money">VAC</th>
-                      <th>{isRtl ? 'الحالة' : 'Status'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {points.map(pt => (
-                      <tr key={pt.seq}>
-                        <td className="col-pin font-mono">{pt.label}</td>
-                        <td className="money">{formatMoney(pt.pv, { currency: ccy })}</td>
-                        <td className="money">{pt.ev === null ? '—' : formatMoney(pt.ev, { currency: ccy })}</td>
-                        <td className="money">{pt.ac === null ? '—' : formatMoney(pt.ac, { currency: ccy })}</td>
-                        <td className={cn('money', pt.ev === null ? 'text-muted-foreground' : varianceTone(pt.sv))}>
-                          {pt.ev === null ? '—' : formatMoney(pt.sv, { currency: ccy })}
-                        </td>
-                        <td className={cn('money', pt.ev === null ? 'text-muted-foreground' : varianceTone(pt.cv))}>
-                          {pt.ev === null ? '—' : formatMoney(pt.cv, { currency: ccy })}
-                        </td>
-                        <td className={cn('money', indexTone(pt.spi))}>{fmtIndex(pt.spi)}</td>
-                        <td className={cn('money', indexTone(pt.cpi))}>{fmtIndex(pt.cpi)}</td>
-                        <td className="money">{pt.eac === null ? '—' : formatMoney(pt.eac, { currency: ccy })}</td>
-                        <td className={cn('money', pt.vac === null ? 'text-muted-foreground' : varianceTone(pt.vac))}>
-                          {pt.vac === null ? '—' : formatMoney(pt.vac, { currency: ccy })}
-                        </td>
-                        <td>
-                          <span className={cn('badge', STATUS_META[pt.status].tone)}>
-                            {isRtl ? STATUS_META[pt.status].ar : STATUS_META[pt.status].en}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {/* TOTAL — after the last period (owner rule). */}
-                    {points.length > 0 && (
-                      <tr className="border-t-2 border-primary/30 font-semibold">
-                        <td className="col-pin text-primary uppercase tracking-wider">
-                          {isRtl ? 'الإجمالي' : 'Total'}
-                        </td>
-                        <td className="money">{formatMoney(lastPv, { currency: ccy })}</td>
-                        <td className="money">{lastEv === null ? '—' : formatMoney(lastEv, { currency: ccy })}</td>
-                        <td className="money">{lastAc === null ? '—' : formatMoney(lastAc, { currency: ccy })}</td>
-                        <td className={cn('money', varianceTone(lastSv))}>{lastEv === null ? '—' : formatMoney(lastSv, { currency: ccy })}</td>
-                        <td className={cn('money', varianceTone(lastCv))}>{lastEv === null ? '—' : formatMoney(lastCv, { currency: ccy })}</td>
-                        <td className={cn('money', indexTone(m.spi))}>{fmtIndex(m.spi)}</td>
-                        <td className={cn('money', indexTone(m.cpi))}>{fmtIndex(m.cpi)}</td>
-                        <td className="money">{formatMoney(m.eac, { currency: ccy })}</td>
-                        <td className={cn('money', varianceTone(m.vac))}>{formatMoney(m.vac, { currency: ccy })}</td>
-                        <td />
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
-                {isRtl
-                  ? 'قراءة فقط — كل رقم مشتق تلقائيًا من مدخلات الفترات؛ لا يُدخَل يدويًا. EV وAC يقفان عند آخر فترة شغّالة فعلًا.'
-                  : 'Read-only — every figure is derived automatically from the period entries; EV and AC stop at the last truly-worked period.'}
-              </p>
-            </div>
-          );
-        })() : (() => {
-          /** Class lenses: the running position of ONE class. */
-          const rows = classCumulative(store.periods, lens);
-          const last = rows.length ? rows[rows.length - 1] : null;
-          return (
-            <div>
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-                <h3 className="sec-head !mb-0 flex-1">
-                  {isRtl
-                    ? 'الموقف التراكمي — ' + (lens === 'direct' ? 'مباشرة' : 'غير مباشرة')
-                    : 'Cumulative Position — ' + (lens === 'direct' ? 'Direct' : 'Indirect')}
-                </h3>
-              </div>
-              <div className="ds-table-wrap">
-                <table className="ds-table">
-                  <thead>
-                    <tr>
-                      <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
-                      <th className="money">PV</th>
-                      <th className="money">EV</th>
-                      <th className="money">AC</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(r => (
-                      <tr key={r.id}>
-                        <td className="col-pin font-mono">{r.label}</td>
-                        <td className="money">{formatMoney(r.pv, { currency: ccy })}</td>
-                        <td className="money">{formatMoney(r.ev, { currency: ccy })}</td>
-                        <td className="money">{formatMoney(r.ac, { currency: ccy })}</td>
-                      </tr>
-                    ))}
-                    {last && (
-                      <tr className="border-t-2 border-primary/30 font-semibold">
-                        <td className="col-pin text-primary uppercase tracking-wider">
-                          {isRtl ? 'الإجمالي' : 'Total'}
-                        </td>
-                        <td className="money">{formatMoney(last.pv, { currency: ccy })}</td>
-                        <td className="money">{formatMoney(last.ev, { currency: ccy })}</td>
-                        <td className="money">{formatMoney(last.ac, { currency: ccy })}</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
-                {isRtl
-                  ? 'قراءة فقط — مجاميع جارية لمكوّنات هذه الفئة؛ الفترات الأقدم من ظهور الفئة تساهم بصفر.'
-                  : 'Read-only — running sums of this class; periods older than the class contribute zero.'}
-              </p>
-            </div>
-          );
-        })()}
-        </>
-
       )}
 
       {/* ══════════════════ MATRIX ══════════════════ */}
@@ -1625,6 +1443,8 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
             <thead>
               <tr>
                 <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
+                <th>{isRtl ? 'من' : 'From'}</th>
+                <th>{isRtl ? 'إلى' : 'To'}</th>
                 <th className="money">PV</th>
                 <th className="money">EV</th>
                 <th className="money">AC</th>
@@ -1653,6 +1473,12 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                           </span>}
                         </span>
                       </td>
+                      <td className="font-mono text-muted-foreground number-ltr whitespace-nowrap">
+                        {formatDateOrDash(p.start, isRtl ? 'ar' : 'en')}
+                      </td>
+                      <td className="font-mono text-muted-foreground number-ltr whitespace-nowrap">
+                        {formatDateOrDash(p.end, isRtl ? 'ar' : 'en')}
+                      </td>
                       {/*
                         STEP 12 — the same three columns, viewed through the
                         cost-class lens. TOTAL keeps the pre-Step-12 behaviour
@@ -1668,19 +1494,16 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
                            Direct/Indirect components. canWrite=false on every
                            cell closes the manual path at the UI as well.
                            No provenance chips either: a derived figure has
-                           no AUTO/MANUAL story to tell.
-                           PERIOD VIEW (owner rule): the figure is what this
-                           period ADDS — the running total lives on the
-                           Cumulative tab, not here. */
+                           no AUTO/MANUAL story to tell. */
                         <>
-                          <ValueCell ccy={ccy} v={incs.get(p.id)?.pv ?? 0} src={p.pvSource} locked={locked} canWrite={false}
+                          <ValueCell ccy={ccy} v={p.pv} src={p.pvSource} locked={locked} canWrite={false}
                                      hideBadge
                                      onSave={() => {}} onAuto={() => {}} />
-                          <ValueCell ccy={ccy} v={incs.get(p.id)?.ev ?? 0} src={p.evSource} locked={locked} canWrite={false}
+                          <ValueCell ccy={ccy} v={p.ev} src={p.evSource} locked={locked} canWrite={false}
                                      hideBadge
                                      onSave={() => {}} onAuto={() => {}} />
                           {/* STEP 11 — absence still reads as absence. */}
-                          <ValueCell ccy={ccy} v={incs.get(p.id)?.ac ?? 0} src={p.acSource} locked={locked} canWrite={false}
+                          <ValueCell ccy={ccy} v={p.ac} src={p.acSource} locked={locked} canWrite={false}
                                      notEntered={p.acSource !== 'manual'} isRtl={isRtl}
                                      hideBadge
                                      onSave={() => {}} onAuto={() => {}} />
