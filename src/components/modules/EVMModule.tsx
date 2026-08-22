@@ -21,7 +21,7 @@ import {
 import {
   Activity, TrendingUp, Grid3x3, ClipboardCheck, Settings2, RotateCcw,
   Check, AlertTriangle, Lock, Info, Layers, CalendarPlus,
-  ArrowUpRight, ArrowDownRight, Plus, ClipboardPaste, PencilLine,
+  ArrowUpRight, ArrowDownRight, Plus, ClipboardPaste, PencilLine, Scale,
 } from 'lucide-react';
 import {
   readSyncedEvm, writeEvm, snapshot, metricsFor, setValue, clearOverride,
@@ -40,7 +40,7 @@ import {
   PvMethod, PV_METHODS, pvCurve, updateDraftBaseline,
   parsePvPaste, applyPvColumn, validatePv,
   // ── Step 12: Direct / Indirect / Total ──
-  computeBacSplit, setClassValue, applyIndirectEv, classMetrics, hasSplit,
+  computeBac, computeBacSplit, setClassValue, applyIndirectEv, classMetrics, hasSplit,
   BacSplit, ClassField,
 } from '../../lib/evm';
 import { effectiveScheduleDuration, timePlannedPercent } from '../../lib/delayCalculations';
@@ -100,10 +100,11 @@ const TT_CURSOR = { fill: 'rgba(212,175,55,0.10)', stroke: 'rgba(212,175,55,0.35
 // The tab set after the owner's consolidation: the S-Curve chart lives
 // in the Dashboard and the Trend content moved into the Dashboard too —
 // one reporting surface, no duplicated charts.
-type Tab = 'dashboard' | 'matrix' | 'periods' | 'forecast' | 'baseline';
+type Tab = 'dashboard' | 'cvr' | 'matrix' | 'periods' | 'forecast' | 'baseline';
 
 const TABS: { id: Tab; icon: any; en: string; ar: string }[] = [
   { id: 'dashboard', icon: Activity,       en: 'Dashboard',   ar: 'اللوحة' },
+  { id: 'cvr',      icon: Scale,          en: 'CVR',         ar: 'CVR' },
   { id: 'matrix',    icon: Grid3x3,        en: 'Matrix',      ar: 'المصفوفة' },
   { id: 'periods',   icon: ClipboardCheck, en: 'Tables',     ar: 'جداول' },
   { id: 'forecast',  icon: TrendingUp,     en: 'Forecast',    ar: 'التوقعات' },
@@ -247,6 +248,61 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
 
   const snap: EvmSnapshot = useMemo(() => snapshot(project, store), [project, store]);
   const { bac, m, period, prevM, quadrant, prevQuadrant, points, dates, cum, eacOptions, health, baseline } = snap;
+
+  /**
+   * ══════════════════ CVR — COST VALUE RECONCILIATION (owner equations) ══════════════════
+   *
+   *   %Progress Planned = PV ÷ BAC                %Progress = EV ÷ BAC
+   *   Planned CVR = %Progress Planned × (CA − BAC)
+   *   CVR         = %Progress          × (CA − BAC)
+   *   Planned profit  = CA − BAC   (the target — frozen, moves only with the baseline)
+   *   Expected profit = CA − EAC   (the outlook — breathes every period, official method)
+   *
+   * CA (Contract Amount) is the SAME contract basis `computeBac` derives BAC's
+   * fallback from — contract value + APPROVED change orders + settled claims —
+   * so both sides of the margin move together and an unapproved order is
+   * excluded until the day its status flips to approved (auto-linked, no wiring).
+   */
+  const cvr = useMemo(() => {
+    const ca = computeBac(project, store.settings);
+    const contractAmount = ca.bac;
+    const plannedProfit = contractAmount - bac;
+    const expectedProfit = contractAmount - m.eac;
+    const plannedMarginPct = contractAmount > 0 ? plannedProfit / contractAmount : 0;
+    const expectedMarginPct = contractAmount > 0 ? expectedProfit / contractAmount : 0;
+    /* Unapproved change orders: money on the table, NOT in the margin. */
+    let pendingCos = 0;
+    try {
+      const co: unknown = JSON.parse(localStorage.getItem(`pactum-co-${project.id}`) || '[]');
+      if (Array.isArray(co)) {
+        pendingCos = co
+          .filter((r: any) => r?.status && r.status !== 'approved')
+          .reduce((a: number, r: any) => a + (Number(r.value) || 0), 0);
+      }
+    } catch { /* register absent — nothing pending */ }
+    const rows = points.map(p => {
+      /* series() nulls EV on periods with no actuals — they stay '—' here. */
+      const ev = p.ev as number | null;
+      const pctPlanned = bac > 0 ? p.pv / bac : null;
+      const pctProgress = ev === null || bac <= 0 ? null : ev / bac;
+      return {
+        label: p.label, seq: p.seq, status: p.status, approved: p.approved,
+        pv: p.pv, ev,
+        pctPlanned,
+        pctProgress,
+        plannedCvr: pctPlanned === null ? null : pctPlanned * plannedProfit,
+        cvr: pctProgress === null ? null : pctProgress * plannedProfit,
+      };
+    });
+    return {
+      contractAmount, approvedCos: ca.cos, settledClaims: ca.claims, pendingCos,
+      plannedProfit, expectedProfit, plannedMarginPct, expectedMarginPct,
+      /* expected − planned = BAC − EAC = VAC, to the riyal. */
+      profitDelta: expectedProfit - plannedProfit,
+      marginUndefined: !baseline && Math.abs(bac - contractAmount) < 0.5,
+      rows,
+    };
+  }, [project, store.settings, bac, m.eac, points, baseline]);
 
   const liveIndex = currentPeriodIndex(store.periods);
   const canWrite = canEdit && store.settings.allowManual;
@@ -1142,6 +1198,185 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
               </table>
             </div>
           </div>
+        </>
+      )}
+      {/* ══════════════════ CVR — THE MARGIN VIEW ══════════════════ */}
+      {tab === 'cvr' && (
+        <>
+          {/* Four cards: two frozen with the baseline, two breathing with the EAC */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="ds-card ds-card-raised">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="sec-head !mb-0">{isRtl ? 'نسبة هامش الربح المخطط' : 'Planned Profit Margin'}</h3>
+                <Scale className="w-3.5 h-3.5 text-muted-foreground" />
+              </div>
+              <div className="font-mono text-2xl font-semibold number-ltr text-primary">
+                {formatPercent(cvr.plannedMarginPct)}
+              </div>
+              <p className="text-(length:--t-second) text-muted-foreground mt-2">
+                {isRtl ? 'ثابتة — لا تتغير إلا مع الـ Baseline' : 'Fixed — changes only with the baseline'}
+              </p>
+            </div>
+            <div className="ds-card ds-card-raised">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="sec-head !mb-0">{isRtl ? 'قيمة الربح المخططة' : 'Planned Profit Value'}</h3>
+                <Scale className="w-3.5 h-3.5 text-muted-foreground" />
+              </div>
+              <div className="font-mono text-2xl font-semibold number-ltr text-primary">
+                {formatMoney(cvr.plannedProfit, { currency: ccy })}
+              </div>
+              <p className="font-mono text-(length:--t-second) text-muted-foreground mt-2 number-ltr">CA − BAC</p>
+            </div>
+            <div className="ds-card ds-card-raised">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="sec-head !mb-0">{isRtl ? 'هامش الربح المتوقع' : 'Expected Profit Margin'}</h3>
+                <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
+              </div>
+              <div className={cn('font-mono text-2xl font-semibold number-ltr',
+                                 cvr.expectedProfit >= 0 ? 'text-chart-4' : 'text-chart-3')}>
+                {formatPercent(cvr.expectedMarginPct)}
+              </div>
+              <p className="text-(length:--t-second) text-muted-foreground mt-2">
+                {isRtl ? 'CA − EAC · يتحرك مع كل مدة معتمدة' : 'CA − EAC · moves with every approved period'}
+              </p>
+            </div>
+            <div className="ds-card ds-card-raised">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="sec-head !mb-0">{isRtl ? 'قيمة الربح المتوقعة' : 'Expected Profit Value'}</h3>
+                <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
+              </div>
+              <div className={cn('font-mono text-2xl font-semibold number-ltr',
+                                 cvr.expectedProfit >= 0 ? 'text-chart-4' : 'text-chart-3')}>
+                {formatMoney(cvr.expectedProfit, { currency: ccy })}
+              </div>
+              <p className="text-(length:--t-second) text-muted-foreground mt-2 number-ltr">
+                <span className={cn('font-mono', varianceTone(cvr.profitDelta))}>
+                  Δ {formatMoney(cvr.profitDelta, { currency: ccy })}
+                </span>
+                {' '}= VAC
+              </p>
+            </div>
+          </div>
+
+          {/* CA anatomy + the approval rule, stated in the open */}
+          <div className="ds-card ds-card-raised">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="sec-head !mb-0">{isRtl ? 'مكونات قيمة العقد (CA)' : 'Contract Amount (CA) Anatomy'}</h3>
+              <span className="font-mono text-lg text-primary number-ltr">
+                {formatMoney(cvr.contractAmount, { currency: ccy })}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              {[
+                { k: isRtl ? 'قيمة العقد' : 'Contract Value', v: cvr.contractAmount - cvr.approvedCos - cvr.settledClaims, c: 'text-white' },
+                { k: isRtl ? 'أوامل معتمدة' : 'Approved COs', v: cvr.approvedCos, c: 'text-chart-4' },
+                { k: isRtl ? 'مطالبات مسوّاة' : 'Settled Claims', v: cvr.settledClaims, c: 'text-chart-4' },
+                { k: isRtl ? 'أوامل غير معتمدة (مستبعدة)' : 'Unapproved COs (excluded)', v: cvr.pendingCos, c: 'text-muted-foreground' },
+              ].map(x => (
+                <div key={x.k}>
+                  <div className="text-(length:--t-label) uppercase tracking-widest text-muted-foreground">{x.k}</div>
+                  <div className={cn('font-mono text-sm font-semibold number-ltr mt-1', x.c)}>
+                    {formatMoney(x.v, { currency: ccy })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-(length:--t-second) text-muted-foreground italic mt-3">
+              {isRtl
+                ? 'المعتمد فقط يدخل الهامش — أول ما يُعتمد أمر يدخل تلقائيًا، من غير أي ربط يدوي. BAC يتحرك بنفس القيمة فيبقى الهامش المخطط ثابتًا معه.'
+                : 'Only approved value enters the margin — the moment an order is approved it links itself, no manual wiring. BAC moves by the same amount, keeping the planned margin frozen.'}
+            </p>
+            {cvr.marginUndefined && (
+              <p className="text-(length:--t-body) text-chart-5 mt-2 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {isRtl
+                  ? 'لا توجد موازنة معتمدة ولا Baseline — BAC ساقط على قيمة العقد، فالهامش المخطط صفر. سجّل Baseline (تبويب الأساس) ليصبح للهامش معنى.'
+                  : 'No approved budget and no baseline — BAC fell back to the contract value, so the planned margin is zero. Register a baseline (Baseline tab) for the margin to mean anything.'}
+              </p>
+            )}
+          </div>
+
+          {/* The two curves — planned margin vs earned margin, converging on CA − BAC */}
+          <div className="ds-card ds-card-raised">
+            <h3 className="sec-head">{isRtl ? 'منحنى الهامش — مخطط مقابل مكتسب' : 'Margin Curve — Planned vs Earned CVR'}</h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={cvr.rows} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
+                <XAxis dataKey="label" {...AXIS} />
+                <YAxis {...AXIS} tickFormatter={shortMoney} />
+                <Tooltip contentStyle={TT_STYLE} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={TT_CURSOR}
+                         formatter={(v: any) => v === null ? '—' : formatMoney(Number(v), { currency: ccy })} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
+                {cvr.plannedProfit !== 0 && (
+                  <ReferenceLine y={cvr.plannedProfit} stroke={C_EV} strokeDasharray="4 4"
+                                 label={{ value: 'CA − BAC', fill: C_EV, fontSize: 10, position: 'insideTopRight' }} />
+                )}
+                <Line type="monotone" dataKey="plannedCvr" name={isRtl ? 'CVR مخطط' : 'Planned CVR'}
+                      stroke={C_PV} strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="cvr" name="CVR"
+                      stroke={C_EV} strokeWidth={2} dot={false} connectNulls={false} />
+                {period && (
+                  <ReferenceLine x={period.label} stroke="rgba(212,175,55,0.5)" strokeDasharray="3 3"
+                                 label={{ value: isRtl ? 'الآن' : 'NOW', fill: '#d4af37', fontSize: 9, position: 'top' }} />
+                )}
+                <Brush dataKey="label" height={22} stroke="rgba(212,175,55,0.4)"
+                       fill="rgba(0,0,0,0.3)" travellerWidth={8} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* The monthly reconciliation table — same equations, every period */}
+          <div className="ds-table-wrap">
+            <table className="ds-table">
+              <thead>
+                <tr>
+                  <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
+                  <th className="money">PV</th>
+                  <th className="money">{isRtl ? '% مخطط' : '% Planned'}</th>
+                  <th className="money">{isRtl ? 'CVR مخطط' : 'Planned CVR'}</th>
+                  <th className="money">EV</th>
+                  <th className="money">{isRtl ? '% منجز' : '% Earned'}</th>
+                  <th className="money">CVR</th>
+                  <th className="money">Δ</th>
+                  <th>{isRtl ? 'الحالة' : 'Status'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cvr.rows.map(r => {
+                  const delta = r.cvr !== null ? r.cvr - (r.plannedCvr ?? 0) : null;
+                  return (
+                    <tr key={r.seq} className={cn(!r.approved && 'opacity-60')}>
+                      <td className="col-pin font-mono text-primary">{r.label}</td>
+                      <td className="money">{formatMoney(r.pv, { currency: ccy })}</td>
+                      <td className="money">{formatPercent(r.pctPlanned)}</td>
+                      <td className="money">{r.plannedCvr === null ? '—' : formatMoney(r.plannedCvr, { currency: ccy })}</td>
+                      <td className="money">{r.ev === null ? '—' : formatMoney(r.ev, { currency: ccy })}</td>
+                      <td className="money">{formatPercent(r.pctProgress)}</td>
+                      <td className={cn('money', r.cvr !== null && r.cvr < 0 && 'text-chart-3')}>
+                        {r.cvr === null ? '—' : formatMoney(r.cvr, { currency: ccy })}
+                      </td>
+                      <td className={cn('money', delta !== null ? varianceTone(delta) : '')}>
+                        {delta === null ? '—' : formatMoney(delta, { currency: ccy })}
+                      </td>
+                      <td>
+                        <span className={cn('badge', STATUS_META[r.status].tone)}>
+                          {isRtl ? STATUS_META[r.status].ar : STATUS_META[r.status].en}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* The equations, in the open, exactly as agreed */}
+          <p className="text-(length:--t-second) text-muted-foreground italic">
+            {isRtl
+              ? 'Planned CVR = (PV ÷ BAC) × (CA − BAC) · CVR = (EV ÷ BAC) × (CA − BAC) · الربح المتوقع = CA − EAC (بالطريقة الرسمية الموقّعة) · عند 100% يُقفل المنحنيان على CA − BAC'
+              : 'Planned CVR = (PV ÷ BAC) × (CA − BAC) · CVR = (EV ÷ BAC) × (CA − BAC) · Expected profit = CA − EAC (official signed method) · At 100% both curves close on CA − BAC'}
+          </p>
         </>
       )}
       {/* ══════════════════ MATRIX ══════════════════ */}
