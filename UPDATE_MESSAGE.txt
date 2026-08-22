@@ -1,1 +1,1 @@
-Progress card now reads the earned value: Actual Progress on the Overview = EV / BAC from the EVM engine (same number as the dashboard % bars), with the period named and the formula stated. No BAC shows an em dash, never 0%. The manual entry that sat at zero forever is gone; executive summaries quote the same earned percent
+All three progress displays now read the same earned number: project header card, Overview card and the sector/portfolio project cards show EV / BAC from the EVM engine (period named, formula stated). No BAC shows an em dash — never a fake 0%

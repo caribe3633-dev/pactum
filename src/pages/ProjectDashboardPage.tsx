@@ -84,16 +84,19 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
      quadrant state (ahead/behind × under/over budget), not a verdict. */
   const contractPhase = project ? contractPhaseOption(project.contractPhase) : null;
   const evmPosition = useMemo(() => {
-    if (!project) return { quadrant: null, health: null, onTarget: false };
+    if (!project) return { quadrant: null, health: null, onTarget: false, progressPct: null, period: '' };
     try {
       const snap = evmSnapshot(project as any, readSyncedEvm(project as any));
       return {
         quadrant: snap.quadrant ?? null,
         health: snap.health ?? null,
         onTarget: withinTolerance(snap.m.spi, snap.m.cpi),
+        /** Header progress = EV ÷ BAC, same engine as the Overview card. */
+        progressPct: snap.bac > 0 ? snap.m.ev / snap.bac : null,
+        period: snap.period?.label ?? '',
       };
     } catch {
-      return { quadrant: null, health: null, onTarget: false };
+      return { quadrant: null, health: null, onTarget: false, progressPct: null, period: '' };
     }
   }, [project, activeTab]);
 
@@ -234,8 +237,14 @@ export default function ProjectDashboard({ params }: { params: { id: string } })
             </div>
             <div className="kpi">
               <div className="kpi-k">{t.progress}</div>
-              <div className="kpi-v kpi-v-gold">{formatPercent(project.progress)}</div>
-              <div className="kpi-sub">{lang === 'ar' ? 'مكتمل' : 'Complete'}</div>
+              <div className="kpi-v kpi-v-gold">
+                {evmPosition.progressPct === null ? '—' : formatPercent(evmPosition.progressPct)}
+              </div>
+              <div className="kpi-sub">
+                {evmPosition.progressPct === null
+                  ? (lang === 'ar' ? 'لا يوجد BAC' : 'No BAC')
+                  : `${lang === 'ar' ? 'مكتسب · EV ÷ BAC' : 'Earned · EV ÷ BAC'}${evmPosition.period ? ` · ${evmPosition.period}` : ''}`}
+              </div>
             </div>
             <div className="kpi">
               <div className="kpi-k">{t.status}</div>

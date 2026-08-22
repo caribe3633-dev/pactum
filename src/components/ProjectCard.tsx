@@ -1,9 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link } from 'wouter';
 import { useAuth } from '../lib/store';
 import { useProjectCurrency } from '../lib/useProjectCurrency';
 import { useTranslation } from '../lib/i18n';
 import { formatCompactNumber, formatPercent, cn } from '../lib/utils';
+// PROGRESS IS EARNED, NOT TYPED (owner rule): the card bar reads
+// EV ÷ BAC from the EVM engine — same number as the Overview and the
+// project header. The stored manual field no longer feeds any screen.
+import { snapshot as evmSnapshot, readSyncedEvm } from '../lib/evm';
 import {
   X, TrendingUp, AlertTriangle, ShieldAlert,
   Pencil, Check, ImageIcon, Trash2, UploadCloud, User,
@@ -84,6 +88,18 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({ project: p, onDelete, editable }: ProjectCardProps) {
+  /** PROGRESS = EV ÷ BAC from the EVM engine (owner rule) — the same
+   *  number the Overview card and the project header print. Null when
+   *  there is no budget to measure against: the bar states nothing
+   *  rather than a confident 0%. */
+  const evmPct = useMemo(() => {
+    try {
+      const snap = evmSnapshot(p as any, readSyncedEvm(p as any));
+      return snap.bac > 0 ? snap.m.ev / snap.bac : null;
+    } catch {
+      return null;
+    }
+  }, [p]);
   /**
    * VISUAL QA — same defect as SectorCard: the unit was a literal "SAR"
    * beside a formatCompactNumber() figure, so the Sprint 2B sweep of
@@ -299,16 +315,18 @@ export default function ProjectCard({ project: p, onDelete, editable }: ProjectC
           </div>
         )}
 
-        {/* Progress */}
+        {/* Progress — EARNED (EV ÷ BAC), never the dead manual field. */}
         <div>
           <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">
-            <span>{isRtl ? 'نسبة الإنجاز' : 'Physical Progress'}</span>
-            <span className="font-mono text-white number-ltr">{formatPercent(p.progress)}</span>
+            <span>{isRtl ? 'نسبة الإنجاز' : 'Earned Progress'}</span>
+            <span className="font-mono text-white number-ltr">
+              {evmPct === null ? '—' : formatPercent(evmPct)}
+            </span>
           </div>
           <div className="h-1.5 bg-white/5 rounded-sm overflow-hidden">
             <div
               className={cn('h-full rounded-sm transition-all', p.delayDays > 30 ? 'bg-chart-3' : p.delayDays > 0 ? 'bg-chart-5' : 'bg-primary')}
-              style={{ width: `${p.progress * 100}%` }}
+              style={{ width: `${(evmPct ?? 0) * 100}%` }}
             />
           </div>
         </div>
