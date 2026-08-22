@@ -9,7 +9,7 @@ import {
   ResponsiveContainer, ReferenceLine, Brush,
 } from 'recharts';
 import { Scale, TrendingUp, AlertTriangle, Download } from 'lucide-react';
-import { readSyncedEvm, snapshot, computeBac, STATUS_META } from '../../lib/evm';
+import { readSyncedEvm, snapshot, computeBac, computeBacSplit, STATUS_META } from '../../lib/evm';
 
 /**
  * CVR — COST VALUE RECONCILIATION · the owner's margin view.
@@ -61,6 +61,9 @@ function shortMoney(v: number): string {
   return String(Math.round(v));
 }
 
+/** Short money inside a note line. */
+function fmtShort(v: number): string { return shortMoney(v); }
+
 /** Delta colour: over/under against zero, muted when nothing to say. */
 function varianceTone(v: number): string {
   if (Math.abs(v) < 0.005) return 'text-muted-foreground';
@@ -95,29 +98,70 @@ export default function CVRModule({ project }: { project: Project; canEdit?: boo
           .reduce((a: number, r: any) => a + (Number(r.value) || 0), 0);
       }
     } catch { /* register absent — nothing pending */ }
-    const rows = points.map(p => {
+    /* ── THE DIRECT BASIS (owner rule) ─────────────────────────────
+     * %Progress        = EV(t) DIRECT ÷ BAC DIRECT
+     * %Progress Planned = PV(t) DIRECT ÷ BAC DIRECT
+     * EVM is measured on direct cost — so is the CVR progress. The direct
+     * half of a period is (total − indirect) where the split was recorded;
+     * BAC direct comes from the approved Baseline Package. When either is
+     * missing the tab does NOT fake the direct basis: it falls back to
+     * totals and says so, because a wrong denominator is worse than a
+     * stated approximation. */
+    const split = computeBacSplit(project, store.settings);
+    const bD = split.available ? split.directBac : null;
+    const periods = store.periods;
+    const aligned = periods.length === points.length;
+    const directOf = (idx: number, total: number | null, field: 'indirectPv' | 'indirectEv'): number | null => {
+      if (!aligned) return null;
+      const per = periods[idx];
+      const ind = per ? per[field] : undefined;
+      if (ind === undefined || total === null) return null;
+      return total - ind;
+    };
+    const preRows = points.map((p, idx) => {
       /* series() nulls EV on periods with no actuals — they stay '—' here. */
       const ev = p.ev as number | null;
-      const pctPlanned = bac > 0 ? p.pv / bac : null;
-      const pctProgress = ev === null || bac <= 0 ? null : ev / bac;
+      const pvD = directOf(idx, p.pv, 'indirectPv');
+      const evD = ev === null ? null : directOf(idx, ev, 'indirectEv');
+      return { p, ev, pvD, evD };
+    });
+    /* One basis for the whole curve, never a mix. Direct is used only when
+     * BAC direct exists AND every plotted period carries the split. */
+    const useDirect = bD !== null && bD > 0
+      && preRows.every(r => r.pvD !== null)
+      && preRows.filter(r => r.ev !== null).every(r => r.evD !== null);
+    const denom = useDirect ? (bD as number) : bac;
+    const rows = preRows.map(({ p, ev, pvD, evD }) => {
+      const pvShown = useDirect ? (pvD as number) : p.pv;
+      const evShown = useDirect && evD !== null ? evD : ev;
+      const pctPlanned = denom > 0 ? pvShown / denom : null;
+      const pctProgress = evShown === null || denom <= 0 ? null : evShown / denom;
       return {
         label: p.label, seq: p.seq, status: p.status, approved: p.approved,
-        pv: p.pv, ev,
+        pv: pvShown, ev: evShown,
         pctPlanned,
         pctProgress,
         plannedCvr: pctPlanned === null ? null : pctPlanned * plannedProfit,
         cvr: pctProgress === null ? null : pctProgress * plannedProfit,
       };
     });
+    const basisNote = useDirect
+      ? (isRtl
+          ? `الأساس: مباشر — EV المباشر ÷ BAC المباشر (${fmtShort(denom)})`
+          : `Basis: DIRECT — direct EV ÷ direct BAC (${fmtShort(denom)})`)
+      : (isRtl
+          ? 'الأساس: إجمالي مؤقتًا — يتطلب موازنة معتمدة (باك بفصل الفئات) وفترات مفصولة مباشر/غير مباشر'
+          : 'Basis: TOTAL for now — needs an approved package (split BAC) and periods carrying the direct/indirect split');
     return {
       contractAmount, approvedCos: ca.cos, settledClaims: ca.claims, pendingCos,
       plannedProfit, expectedProfit, plannedMarginPct, expectedMarginPct,
       /* expected − planned = BAC − EAC = VAC, to the riyal. */
       profitDelta: expectedProfit - plannedProfit,
       marginUndefined: !baseline && Math.abs(bac - contractAmount) < 0.5,
+      useDirect, basisNote,
       rows,
     };
-  }, [project, store.settings, bac, m.eac, points, baseline]);
+  }, [project, store, store.settings, bac, m.eac, points, baseline]);
 
   return (
     <div className="space-y-4">
@@ -132,12 +176,17 @@ export default function CVRModule({ project }: { project: Project; canEdit?: boo
             </p>
           </div>
         </div>
-        <ReportButton
-          reportId="cvr"
-          context={{ project, cvr, reportCurrency: ccy }}
-          label={isRtl ? 'تصدير' : 'Export'}
-          variant="primary"
-        />
+        <div className="flex items-center gap-3">
+          <span className={cn('badge whitespace-nowrap', cvr.useDirect ? 'badge-ok' : 'badge-warn')}>
+            {cvr.basisNote}
+          </span>
+          <ReportButton
+            reportId="cvr"
+            context={{ project, cvr, reportCurrency: ccy }}
+            label={isRtl ? 'تصدير' : 'Export'}
+            variant="primary"
+          />
+        </div>
       </div>
 
       {/* Four cards: two frozen with the baseline, two breathing with the EAC */}
@@ -269,10 +318,10 @@ export default function CVRModule({ project }: { project: Project; canEdit?: boo
           <thead>
             <tr>
               <th className="col-pin">{isRtl ? 'الفترة' : 'Period'}</th>
-              <th className="money">PV</th>
+              <th className="money">{cvr.useDirect ? (isRtl ? 'PV مباشر' : 'PV direct') : 'PV'}</th>
               <th className="money">{isRtl ? '% مخطط' : '% Planned'}</th>
               <th className="money">{isRtl ? 'CVR مخطط' : 'Planned CVR'}</th>
-              <th className="money">EV</th>
+              <th className="money">{cvr.useDirect ? (isRtl ? 'EV مباشر' : 'EV direct') : 'EV'}</th>
               <th className="money">{isRtl ? '% منجز' : '% Earned'}</th>
               <th className="money">CVR</th>
               <th className="money">Δ</th>
@@ -311,8 +360,8 @@ export default function CVRModule({ project }: { project: Project; canEdit?: boo
       {/* The equations, in the open, exactly as agreed */}
       <p className="text-(length:--t-second) text-muted-foreground italic">
         {isRtl
-          ? 'Planned CVR = (PV ÷ BAC) × (CA − BAC) · CVR = (EV ÷ BAC) × (CA − BAC) · الربح المتوقع = CA − EAC (بالطريقة الرسمية الموقّعة) · عند 100% يُقفل المنحنيان على CA − BAC'
-          : 'Planned CVR = (PV ÷ BAC) × (CA − BAC) · CVR = (EV ÷ BAC) × (CA − BAC) · Expected profit = CA − EAC (official signed method) · At 100% both curves close on CA − BAC'}
+          ? 'Planned CVR = (%مخطط) × (CA − BAC) · CVR = (%منجز) × (CA − BAC) · %مخطط = PV المباشر ÷ BAC المباشر · %منجز = EV المباشر ÷ BAC المباشر · الربح المتوقع = CA − EAC · عند 100% يُقفل المنحنيان على CA − BAC'
+          : 'Planned CVR = (%planned) × (CA − BAC) · CVR = (%earned) × (CA − BAC) · %planned = direct PV ÷ direct BAC · %earned = direct EV ÷ direct BAC · Expected profit = CA − EAC · At 100% both curves close on CA − BAC'}
       </p>
     </div>
   );

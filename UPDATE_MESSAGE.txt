@@ -1,1 +1,1 @@
-Fix: the Indirect Cost Impact input is back in the cost assessment panel of both Change Orders and Claims (it was accidentally removed with the old single budget-line link). Direct input, indirect input, and the two per-class links (direct/indirect) all sit together in the panel again
+CVR progress now measures on the DIRECT basis: %planned = direct PV ÷ direct BAC and %earned = direct EV ÷ direct BAC. A visible badge states the active basis (direct, or totals-fallback when the approved package or period splits are missing) and the export carries it too

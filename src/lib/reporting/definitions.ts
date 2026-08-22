@@ -4596,6 +4596,8 @@ registerReport<Ctx & { cvr?: any }>({
       meta: meta(ctx, m, 'CVR — Cost Value Reconciliation', ''),
       page: A4, cover: false,
       sections: [
+        ...(c.basisNote ? [{ kind: 'summary' as const, title: L(m, 'Basis', 'الأساس'),
+          text: String(c.basisNote) }] : []),
         { kind: 'kpi', title: L(m, 'Profit Position', 'موقف الربح'), columns: 4, items: [
           { label: L(m, 'Planned Margin', 'هامش مخطط'), value: pct(c.plannedMarginPct), tone: 'gold' },
           { label: L(m, 'Planned Profit', 'ربح مخطط'), value: money(c.plannedProfit), unit: unit(ctx), tone: 'gold' },
@@ -4616,8 +4618,8 @@ registerReport<Ctx & { cvr?: any }>({
         ]},
         { kind: 'summary', title: L(m, 'Method', 'المنهجية'),
           text: L(m,
-            'Only approved change orders and settled claims enter CA, linking themselves the day they are approved; BAC moves by the same amount so the planned margin stays frozen with the baseline. The expected profit is CA − EAC at the official signed forecast method and moves with every approved period. Expected − planned = VAC.',
-            'المعتمد فقط من أوامل التغيير والمطالبات المسوّاة يدخل قيمة العقد، ويرتبط تلقائيًا يوم الاعتماد؛ وBAC يتحرك بنفس القيمة فيبقى الهامش المخطط مجمدًا مع خط الأساس. والربح المتوقع = CA − EAC بالطريقة الرسمية الموقّعة، ويتحرك مع كل مدة معتمدة. المتوقع − المخطط = VAC.') },
+            'Progress is measured on the DIRECT basis: %planned = direct PV ÷ direct BAC, %earned = direct EV ÷ direct BAC. Only approved change orders and settled claims enter CA, linking themselves the day they are approved; BAC moves by the same amount so the planned margin stays frozen with the baseline. The expected profit is CA − EAC at the official signed forecast method. Expected − planned = VAC.',
+            'البروجرس يقاس على الأساس المباشر: %مخطط = PV المباشر ÷ BAC المباشر، و%منجز = EV المباشر ÷ BAC المباشر. المعتمد فقط من أوامل التغيير والمطالبات المسوّاة يدخل قيمة العقد، ويرتبط تلقائيًا يوم الاعتماد؛ وBAC يتحرك بنفس القيمة فيبقى الهامش المخطط مجمدًا مع خط الأساس. والربح المتوقع = CA − EAC بالطريقة الرسمية الموقّعة. المتوقع − المخطط = VAC.') },
         { kind: 'table', title: L(m, 'Monthly Reconciliation', 'التسوية الشهرية'),
           columns: [
             { key: 'label', label: L(m, 'Period', 'الفترة'), width: 13 },
@@ -4642,7 +4644,7 @@ registerReport<Ctx & { cvr?: any }>({
             status: r.status ?? '—',
           })) },
         { kind: 'summary', title: L(m, 'Equations', 'المعادلات'),
-          text: 'Planned CVR = (PV ÷ BAC) × (CA − BAC)   ·   CVR = (EV ÷ BAC) × (CA − BAC)   ·   Expected profit = CA − EAC   ·   At 100% both curves close on CA − BAC' },
+          text: 'Planned CVR = (%planned) × (CA − BAC)   ·   CVR = (%earned) × (CA − BAC)   ·   %planned = direct PV ÷ direct BAC   ·   %earned = direct EV ÷ direct BAC   ·   Expected profit = CA − EAC   ·   At 100% both curves close on CA − BAC' },
         sig(['Project Manager', 'Commercial Manager']),
       ],
     };
