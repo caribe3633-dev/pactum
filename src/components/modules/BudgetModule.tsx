@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Project } from '../../lib/data';
 import { useTranslation } from '../../lib/i18n';
 import { formatMoney, cn } from '../../lib/utils';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { Plus, Trash2 } from 'lucide-react';
 import ReportButton from '../reporting/ReportButton';
 import { fetchSectors } from '../../mock/sectors';
@@ -73,6 +73,9 @@ export default function BudgetModule({ project, canEdit = true }:
     [companyId, project.id, contractCcy]);
 
   const [isAdding, setIsAdding] = useState(false);
+  // TABLES / DASHBOARD (owner rule): entry and tables on one tab, the
+  // charts on their own Dashboard tab — the module's reporting surface.
+  const [tab, setTab] = useState<'tables' | 'dashboard'>('tables');
   const [saveErr, setSaveErr] = useState('');
   const [newRow, setNewRow] = useState({
     category: '', planned: '', actual: '',
@@ -296,6 +299,24 @@ export default function BudgetModule({ project, canEdit = true }:
 
       <SourceVersionsPanel projectId={project.id} only="budget" canEdit={canEdit} compact />
 
+      {/* TABS — Tables (entry) / Dashboard (charts). */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {([
+          { id: 'tables',    icon: null, en: 'Tables',    ar: 'جداول' },
+          { id: 'dashboard', icon: null, en: 'Dashboard', ar: 'داش بورد' },
+        ] as const).map(x => (
+          <button key={x.id} onClick={() => setTab(x.id)}
+                  className={cn('inline-flex items-center gap-2 px-4 py-2 text-xs border rounded-md transition-colors uppercase tracking-wider',
+                    tab === x.id
+                      ? 'bg-primary/10 text-primary border-primary'
+                      : 'border-white/[0.06] text-muted-foreground hover:text-white')}>
+            {isRtl ? x.ar : x.en}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'tables' && (<>
+
 
       {/* ── Derived cost split ────────────────────────────────────────────
           Three tiles, matching the strip used on every other module. The
@@ -358,28 +379,9 @@ export default function BudgetModule({ project, canEdit = true }:
         </div>
       )}
 
-      <div className="ds-card ds-card-raised" style={{ height: 420 }}>
-        <h3 className="sec-head">Cost Breakdown Structure (CBS)</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          {/* Remaining is computed for the chart the same way the table
-              computes it — one rule, read twice, so the bar and the cell
-              can never disagree. */}
-          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 20, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(212,175,55,0.08)" vertical={false} />
-            <XAxis dataKey="category" stroke="#a5a49f" tick={{fontSize: 12}} angle={-45} textAnchor="end" height={60} />
-            <YAxis stroke="#a5a49f" tick={{fontSize: 12, fontFamily: 'var(--font-mono)'}} tickFormatter={(val) => `${val / 1000000}M`} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--primary)/0.3)' }}
-              itemStyle={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-              formatter={(value: number) => formatMoney(value, { currency: money.base })}
-            />
-            <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="top" height={36}/>
-                        <Bar dataKey="planned" name={t.planned} fill="#d4af37" />
-            <Bar dataKey="actual" name={t.actual} fill="#6f9b78" />
-            <Bar dataKey="remaining" name={isRtl ? 'المتبقي' : 'Remaining'} fill="#c08a3e" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {/* The CBS bar chart moved to the DASHBOARD tab (owner rule):
+          charts live on their own tab now — planned vs actual per line,
+          the spent/remaining donut and the direct/indirect split pie. */}
 
       <div>
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -572,6 +574,162 @@ export default function BudgetModule({ project, canEdit = true }:
           </table>
         </div>
       </div>
+      </>)}
+
+      {/* ══════════════════ DASHBOARD — the charts ══════════════════ */}
+      {tab === 'dashboard' && (() => {
+        /** Whole-budget totals from the SAME chartData the ledger reads —
+         *  one rule, read twice; chart and table can never disagree. */
+        const totals = chartData.reduce(
+          (a, r) => ({ planned: a.planned + r.planned, actual: a.actual + r.actual }),
+          { planned: 0, actual: 0 },
+        );
+        const remaining = totals.planned - totals.actual;
+        const spentPct = totals.planned > 0 ? totals.actual / totals.planned : null;
+        const classTotal = budget.direct + budget.indirect;
+
+        /** Compact money for the bar value labels: 12M, 850K. */
+        const shortM = (v: number): string => {
+          const a = Math.abs(v);
+          if (a >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
+          if (a >= 1e6) return `${(v / 1e6).toFixed(0)}M`;
+          if (a >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
+          return String(Math.round(v));
+        };
+
+        // Readable tooltips — the platform standard: gold label, white
+        // mono figures, soft gold cursor band.
+        const TT = {
+          contentStyle: { backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--primary)/0.35)', borderRadius: 4, padding: '8px 12px', fontSize: '12px', color: '#ffffff' },
+          labelStyle: { color: 'hsl(var(--primary))', fontWeight: 600, marginBottom: 4 },
+          itemStyle: { fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#ffffff' },
+          cursor: { fill: 'rgba(212,175,55,0.10)', stroke: 'rgba(212,175,55,0.35)' },
+        };
+
+        return (
+          <>
+          {/* ═══ 1 · PLANNED vs ACTUAL — one pair of bars per budget line.
+                 The plan is quiet grey, the actual is bright gold: what
+                 happened reads before what was intended. Values on top. */}
+          <div className="ds-card ds-card-raised" style={{ height: 440 }}>
+            <h3 className="sec-head">
+              {isRtl ? 'المخطط مقابل الفعلي — لكل بند' : 'Planned vs Actual — by Budget Line'}
+            </h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 20, bottom: 20 }} barGap={4}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(212,175,55,0.08)" vertical={false} />
+                <XAxis dataKey="category" stroke="#a5a49f" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={60} interval={0} />
+                <YAxis stroke="#a5a49f" tick={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                       tickFormatter={(val) => `${Math.round(val / 1000000)}M`} />
+                <Tooltip {...TT} formatter={(value: number) => formatMoney(value, { currency: money.base })} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="top" height={36} />
+                <Bar dataKey="planned" name={isRtl ? 'مخطط (الخطة)' : 'Planned (the plan)'}
+                     fill="#a5a49f" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="planned" position="top" fontSize={10}
+                             fill="#a5a49f" formatter={(v: number) => shortM(v)} />
+                </Bar>
+                <Bar dataKey="actual" name={isRtl ? 'فعلي (المنصرف)' : 'Actual (spent)'}
+                     fill="#d4af37" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="actual" position="top" fontSize={10}
+                             fill="#d4af37" formatter={(v: number) => shortM(v)} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {/* ═══ 2 · SPENT vs REMAINING — the donut. Gold is what has
+                   gone, dark grey what is left; the hole states the
+                   headline number: the spent percentage. */}
+            <div className="ds-card ds-card-raised" style={{ height: 360 }}>
+              <h3 className="sec-head">
+                {isRtl ? 'المنصرف من البادجت' : 'Spent vs Remaining'}
+              </h3>
+              {totals.planned <= 0 ? (
+                <div className="ds-empty" style={{ height: '75%' }}>
+                  <div className="ds-empty-title">
+                    {isRtl ? 'لا توجد بنود مخططة بعد' : 'No planned lines yet'}
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="80%">
+                  <PieChart>
+                    <Tooltip {...TT} formatter={(value: number) => formatMoney(value, { currency: money.base })} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" />
+                    <Pie
+                      data={[
+                        { name: isRtl ? 'المنصرف' : 'Spent', value: Math.max(0, totals.actual) },
+                        { name: isRtl ? 'المتبقي' : 'Remaining', value: Math.max(0, remaining) },
+                      ]}
+                      dataKey="value" nameKey="name"
+                      innerRadius="58%" outerRadius="85%" paddingAngle={2} strokeWidth={0}
+                    >
+                      <Cell fill="#d4af37" />
+                      <Cell fill="#3f4040" />
+                      <text x="50%" y="47%" textAnchor="middle" fill="#d4af37" fontSize="26" fontWeight="700">
+                        {spentPct === null ? '—' : `${Math.round(spentPct * 100)}%`}
+                      </text>
+                      <text x="50%" y="58%" textAnchor="middle" fill="#a5a49f" fontSize="11">
+                        {isRtl ? 'منصرف من البادجت' : 'of budget spent'}
+                      </text>
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              {remaining < 0 && (
+                <p className="text-(length:--t-second) text-chart-3 mt-1">
+                  {isRtl
+                    ? `تجاوز المخطط بمقدار ${formatMoney(-remaining, { currency: money.base })}`
+                    : `Over plan by ${formatMoney(-remaining, { currency: money.base })}`}
+                </p>
+              )}
+            </div>
+
+            {/* ═══ 3 · DIRECT vs INDIRECT — the split of the budget, from
+                   the SAME classification the KPI strip reads. */}
+            <div className="ds-card ds-card-raised" style={{ height: 360 }}>
+              <h3 className="sec-head">
+                {isRtl ? 'المباشر وغير المباشر من البادجت' : 'Direct vs Indirect — Budget Split'}
+              </h3>
+              {classTotal <= 0 ? (
+                <div className="ds-empty" style={{ height: '75%' }}>
+                  <div className="ds-empty-title">
+                    {isRtl ? 'لا توجد بنود مصنّفة بعد' : 'No classified lines yet'}
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="80%">
+                  <PieChart>
+                    <Tooltip {...TT} formatter={(value: number) => formatMoney(value, { currency: money.base })} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" />
+                    <Pie
+                      data={[
+                        { name: isRtl ? 'مباشر' : 'Direct', value: budget.direct },
+                        { name: isRtl ? 'غير مباشر' : 'Indirect', value: budget.indirect },
+                      ]}
+                      dataKey="value" nameKey="name"
+                      outerRadius="80%" strokeWidth={0}
+                      label={(d: any) => `${Math.round((d.value / classTotal) * 100)}%`}
+                      labelLine={false}
+                    >
+                      <Cell fill="#6f9b78" />
+                      <Cell fill="#c08a3e" />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              {budget.counts.unclassified > 0 && (
+                <p className="text-(length:--t-second) text-chart-5 mt-1">
+                  {isRtl
+                    ? `${budget.counts.unclassified} بند غير مصنَّف خارج هذا الرسم`
+                    : `${budget.counts.unclassified} unclassified line(s) sit outside this chart`}
+                </p>
+              )}
+            </div>
+          </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

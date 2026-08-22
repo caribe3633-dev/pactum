@@ -1,1 +1,1 @@
-All three progress displays now read the same earned number: project header card, Overview card and the sector/portfolio project cards show EV / BAC from the EVM engine (period named, formula stated). No BAC shows an em dash — never a fake 0%
+Budget module now has Tables and Dashboard tabs. Dashboard charts: Planned vs Actual paired bars per budget line (grey plan beside gold actual, values on the bars), a Spent vs Remaining donut with the spent percentage in the hole, and a Direct vs Indirect budget split pie. Tables keeps the ledger and everything else unchanged
