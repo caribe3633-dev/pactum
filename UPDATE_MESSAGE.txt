@@ -1,1 +1,1 @@
-Total rows at the foot of the Cash Flow Periods ledger and the Budget Tables ledger. The EVM Periods tab is renamed Tables (جداول), and its Direct and Indirect lenses each close with a class total (PV/EV/AC whole-history sums)
+The Direct / Indirect class total row in the EVM Tables tab is restyled: a soft-gold footer band with a stronger top border, a two-line label (TOTAL plus the class name and that it spans all periods), white tabular figures, and the empty trailing span now explains itself

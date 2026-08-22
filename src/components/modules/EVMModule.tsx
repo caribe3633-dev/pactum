@@ -1794,15 +1794,29 @@ export default function EVMModule({ project, canEdit = true }: { project: Projec
               {lens !== 'total' && store.periods.length > 0 && bacSplit.available && (() => {
                 const cm = classMetrics(store.periods, store.periods[store.periods.length - 1], bacSplit, store.settings.eacMethod);
                 const c = lens === 'direct' ? cm.direct : cm.indirect;
+                const clsName = lens === 'direct'
+                  ? (isRtl ? 'المباشر' : 'Direct')
+                  : (isRtl ? 'غير المباشر' : 'Indirect');
                 return (
-                  <tr className="border-t-2 border-primary/30 font-semibold">
-                    <td className="col-pin text-primary uppercase tracking-wider">
-                      {isRtl ? 'الإجمالي' : 'Total'}
+                  <tr className="border-t-2 border-primary/40 bg-primary/[0.05] font-semibold">
+                    <td className="whitespace-nowrap">
+                      <span className="inline-flex flex-col leading-tight py-0.5">
+                        <span className="text-primary uppercase tracking-widest text-(length:--t-label)">
+                          {isRtl ? 'الإجمالي' : 'TOTAL'}
+                        </span>
+                        <span className="text-(length:--t-micro) text-muted-foreground font-normal">
+                          Σ {clsName} · {isRtl ? 'كل الفترات' : 'all periods'}
+                        </span>
+                      </span>
                     </td>
-                    <td className="money">{formatMoney(c.pv, { currency: ccy })}</td>
-                    <td className="money">{formatMoney(c.ev, { currency: ccy })}</td>
-                    <td className="money">{formatMoney(c.ac, { currency: ccy })}</td>
-                    <td colSpan={4} />
+                    <td className="money text-white">{formatMoney(c.pv, { currency: ccy })}</td>
+                    <td className="money text-white">{formatMoney(c.ev, { currency: ccy })}</td>
+                    <td className="money text-white">{formatMoney(c.ac, { currency: ccy })}</td>
+                    <td className="text-(length:--t-micro) text-muted-foreground font-normal italic" colSpan={4}>
+                      {isRtl
+                        ? `مجموع ${clsName} عبر كل الفترات — قراءة فقط`
+                        : `Whole-history ${clsName.toLowerCase()} sums — read-only`}
+                    </td>
                   </tr>
                 );
               })()}
