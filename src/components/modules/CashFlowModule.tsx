@@ -4,7 +4,7 @@ import { useTranslation } from '../../lib/i18n';
 import { formatMoney } from '../../lib/utils';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Brush,
+  Tooltip, Legend, ResponsiveContainer, Brush, Cell, ReferenceLine,
 } from 'recharts';
 import { Plus, Trash2, RefreshCw, ArrowRightLeft, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, CalendarRange, TrendingUp } from 'lucide-react';
 // The platform's single date renderer — `30 June 2025` everywhere.
@@ -24,7 +24,7 @@ import { monthLabel, windowOf,
 } from '../../lib/cashFlowDates';
 // SPRINT 1 · TASK 2 — a cash row must say what currency it is counted in.
 // Shared with CertsModule (the second writer) so both produce one shape.
-import { convertCashRow, noRateMessage, cashVariance, cashVarianceTotals, cashSeries, cashCumulativeTable } from '../../lib/cashFlowMoney';
+import { convertCashRow, noRateMessage, cashVariance, cashVarianceTotals, cashSeries, cashCumulativeTable, cashNetTable } from '../../lib/cashFlowMoney';
 import { moneyContext, resolveTxnDate, transactionContext, readTransactionMoney } from '../../lib/moneyEntry';
 import { contractCurrencyOf } from '../../lib/projectCurrency';
 import { companyIdOfProject } from '../../lib/projectMaster';
@@ -119,10 +119,11 @@ function appendCashflowSyncLog(projectId: string, entries: SyncEntry[]): void {
 //              typed inline. Nothing about the way data goes in changes.
 // CUMULATIVE : a derived, READ-ONLY view of the same rows — running sums
 //              and S-curves. Nothing cumulative is ever typed anywhere.
-type CashTab = 'periods' | 'cumulative';
+type CashTab = 'periods' | 'cumulative' | 'net';
 const CASH_TABS: { id: CashTab; icon: any; en: string; ar: string }[] = [
   { id: 'periods',    icon: CalendarRange, en: 'Periods',    ar: 'الفترات' },
   { id: 'cumulative', icon: TrendingUp,    en: 'Cumulative', ar: 'التراكمي' },
+  { id: 'net',        icon: ArrowRightLeft, en: 'Net',       ar: 'الصافي' },
 ];
 
 // ACTUAL cash colours, tuned for the dark card background. The old
@@ -302,6 +303,9 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
   /** The cumulative table's rows — derived from the same chrono rows,
    *  read-only, never stored. Same order: oldest → newest. */
   const cumRows = useMemo(() => cashCumulativeTable(chronoRows), [chronoRows]);
+
+  /** The Net view's rows — planned balance vs actual balance per period. */
+  const netRows = useMemo(() => cashNetTable(chronoRows), [chronoRows]);
 
   /** Long horizons lose the dots and gain the zoom brush. */
   const manyPeriods = chronoRows.length > DOT_LIMIT;
@@ -1014,6 +1018,127 @@ export default function CashFlowModule({ project, canEdit = true }: { project: P
         </div>
 
       </>
+      )}
+
+      {/* ══════════════════ NET — the balance story ══════════════════ */}
+      {tab === 'net' && (
+        <>
+        {/* Actual net as signed bars (green collects, red burns), the
+            planned balance as a quiet dashed line. One question: does
+            the month land where it was planned to land. */}
+        <div className="ds-card ds-card-raised" style={{ height: 380 }}>
+          <h3 className="text-sm font-serif uppercase tracking-widest text-primary mb-4">
+            {lang === 'ar' ? 'الصافي — مخطط مقابل فعلي' : 'Net — Planned vs Actual'}
+          </h3>
+          <ResponsiveContainer width="100%" height="86%">
+            <ComposedChart data={netRows} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(212,175,55,0.08)" vertical={false} />
+              <XAxis dataKey="month" stroke="#a5a49f" interval="preserveStartEnd"
+                     tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+              <YAxis stroke="#a5a49f" tick={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                     tickFormatter={v => kpiMoney(v, money.base)} />
+              <Tooltip {...tooltipStyle} formatter={(v: number) => formatMoney(v, { currency: money.base })} />
+              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+              <ReferenceLine y={0} stroke="rgba(212,175,55,0.4)" strokeDasharray="4 4" />
+              <Bar dataKey="net" name={lang === 'ar' ? 'الصافي الفعلي' : 'Actual Net'} radius={[2, 2, 0, 0]}>
+                {netRows.map((r, i) => (
+                  <Cell key={i} fill={r.net >= 0 ? CASH_IN : CASH_OUT} />
+                ))}
+              </Bar>
+              {hasAnyPlan && (
+                <Line type="monotone" dataKey="plannedNet"
+                      name={lang === 'ar' ? 'الصافي المخطط' : 'Planned Net'}
+                      stroke="#a5a49f" strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.7}
+                      dot={manyPeriods ? false : { r: 2.5 }} connectNulls={false} />
+              )}
+              <Brush dataKey="month" height={22} stroke="rgba(212,175,55,0.4)"
+                     fill="rgba(0,0,0,0.3)" travellerWidth={8} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* The table the chart answers to — read-only, derived. */}
+        <div>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <h3 className="sec-head !mb-0 flex-1">
+              {lang === 'ar' ? 'صافي الفترة' : 'Net by Period'}
+            </h3>
+            <span className="text-(length:--t-micro) uppercase tracking-widest text-muted-foreground border border-white/[0.06] px-2 py-0.5">
+              {lang === 'ar' ? 'قراءة فقط · مشتق من الفترات' : 'READ-ONLY · DERIVED FROM PERIODS'}
+            </span>
+          </div>
+          <div className="ds-table-wrap">
+            <table className="ds-table">
+              <thead>
+                <tr>
+                  <th className="col-pin">{t.month}</th>
+                  <th className="money">{lang === 'ar' ? 'الصافي المخطط' : 'Planned Net'}</th>
+                  <th className="money">{lang === 'ar' ? 'الصافي الفعلي' : 'Actual Net'}</th>
+                  <th className="money">
+                    {lang === 'ar' ? 'الانحراف' : 'Variance'}
+                    <span className="block text-(length:--t-micro) font-normal normal-case tracking-normal text-muted-foreground">
+                      {lang === 'ar' ? 'فعلي − مخطط' : 'actual − planned'}
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {netRows.length === 0 && (
+                  <tr><td colSpan={4}><div className="ds-empty"><div className="ds-empty-title">{t.noData}</div></div></td></tr>
+                )}
+                {netRows.map((r, i) => (
+                  <tr key={i}>
+                    <td className="col-pin font-mono">
+                      {(() => {
+                        const d = normaliseIso(r.month);
+                        const w = d ? windowOf(d) : (/^\d{4}-\d{2}/.test(r.month) ? r.month.slice(0, 7) : '');
+                        return w ? monthLabel(w) : r.month;
+                      })()}
+                    </td>
+                    <td className={cn('money', r.plannedNet === null ? 'text-muted-foreground' : (r.plannedNet >= 0 ? 'money-pos' : 'money-neg'))}>
+                      {r.plannedNet === null ? '—' : formatMoney(r.plannedNet, { currency: money.base })}
+                    </td>
+                    <td className={cn('money font-semibold', r.net >= 0 ? 'money-pos' : 'money-neg')}>
+                      {formatMoney(r.net, { currency: money.base })}
+                    </td>
+                    <td className={cn('money',
+                      r.variance === null ? 'text-muted-foreground'
+                      : r.variance > 0 ? 'money-pos'
+                      : r.variance < 0 ? 'money-neg' : 'text-muted-foreground')}>
+                      {r.variance === null ? '—' : `${r.variance > 0 ? '+' : ''}${formatMoney(r.variance, { currency: money.base })}`}
+                    </td>
+                  </tr>
+                ))}
+                {/* Closing row: the whole-story balances. */}
+                {netRows.length > 0 && (
+                  <tr className="border-t-2 border-primary/30 font-semibold">
+                    <td className="col-pin text-primary uppercase tracking-wider">
+                      {lang === 'ar' ? 'الإجمالي' : 'Total'}
+                    </td>
+                    <td className={cn('money', hasAnyPlan ? (varianceTotals.plannedNet >= 0 ? 'money-pos' : 'money-neg') : 'text-muted-foreground')}>
+                      {hasAnyPlan ? formatMoney(varianceTotals.plannedNet, { currency: money.base }) : '—'}
+                    </td>
+                    <td className={cn('money', netFlow >= 0 ? 'money-pos' : 'money-neg')}>
+                      {formatMoney(netFlow, { currency: money.base })}
+                    </td>
+                    <td className={cn('money',
+                      !hasAnyPlan ? 'text-muted-foreground'
+                      : netFlow - varianceTotals.plannedNet > 0 ? 'money-pos'
+                      : netFlow - varianceTotals.plannedNet < 0 ? 'money-neg' : 'text-muted-foreground')}>
+                      {!hasAnyPlan ? '—' : `${netFlow - varianceTotals.plannedNet > 0 ? '+' : ''}${formatMoney(netFlow - varianceTotals.plannedNet, { currency: money.base })}`}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-(length:--t-second) text-muted-foreground italic mt-2">
+            {lang === 'ar'
+              ? 'قراءة فقط — مشتق تلقائيًا من الفترات؛ الفترات بلا خطة تقول «—» ولا يُخترع لها رقم.'
+              : 'Read-only — derived automatically from the periods; periods without a plan state no figure rather than an invented one.'}
+          </p>
+        </div>
+        </>
       )}
 
       {tab === 'periods' && (

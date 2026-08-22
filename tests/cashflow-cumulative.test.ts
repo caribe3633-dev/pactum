@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cashSeries, cashCumulativeTable } from '../src/lib/cashFlowMoney';
+import { cashSeries, cashCumulativeTable, cashNetTable } from '../src/lib/cashFlowMoney';
 
 // ══════════════════════════════════════════════════════════════════════
 // CASH FLOW — CUMULATIVE VIEW, DERIVED FROM PERIOD ENTRY.
@@ -64,6 +64,37 @@ describe('cashCumulativeTable — the running position', () => {
     expect(cashCumulativeTable([])).toEqual([]);
     expect(cashCumulativeTable(undefined as any)).toEqual([]);
     expect(cashSeries([])).toEqual([]);
+  });
+});
+
+describe('cashNetTable — the balance story', () => {
+  it('planned net, actual net and variance, per period', () => {
+    const t = cashNetTable([
+      { month: '2025-01', in: 120, out: 30, plannedIn: 150, plannedOut: 30 },
+      { month: '2025-02', in: 80,  out: 60 },                       // no plan stated
+    ]);
+    expect(t[0].plannedNet).toBe(120);          // 150 − 30
+    expect(t[0].net).toBe(90);                  // 120 − 30
+    expect(t[0].variance).toBe(-30);            // 90 − 120
+    expect(t[1].plannedNet).toBeNull();
+    expect(t[1].variance).toBeNull();
+    expect(t[1].net).toBe(20);
+    expect(t[1].planned).toBe(false);
+  });
+
+  it('a negative actual month is a fact, not an error', () => {
+    const t = cashNetTable([{ month: '2025-03', in: 10, out: 90, plannedIn: 50, plannedOut: 20 }]);
+    expect(t[0].net).toBe(-80);
+    expect(t[0].variance).toBe(-110);
+  });
+
+  it('empty and malformed input answer empty; the input is never mutated', () => {
+    expect(cashNetTable([])).toEqual([]);
+    expect(cashNetTable(undefined as any)).toEqual([]);
+    const rows = [{ month: '2025-01', in: 100, out: 40 }];
+    const before = JSON.stringify(rows);
+    cashNetTable(rows);
+    expect(JSON.stringify(rows)).toBe(before);
   });
 });
 

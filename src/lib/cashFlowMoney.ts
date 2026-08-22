@@ -321,6 +321,41 @@ export function cashSeries(rows: any[]): CashSeriesPoint[] {
   });
 }
 
+// ── Net view: the balance story ────────────────────────────────────────
+
+export interface CashNetRow {
+  month: string;
+  /** True when this period stated a plan. */
+  planned: boolean;
+  /** Planned In − Planned Out. Null when the period stated no plan. */
+  plannedNet: number | null;
+  /** Actual Cash In − Cash Out. */
+  net: number;
+  /** Net − PlannedNet. Null when the period stated no plan. */
+  variance: number | null;
+}
+
+/**
+ * THE NET VIEW — one row per period, planned balance against actual
+ * balance. Derived, read-only, same rules as every other cash view:
+ * an unplanned period states no planned figure (null, never zero) and
+ * its variance stays null rather than answering a question nobody asked.
+ */
+export function cashNetTable(rows: any[]): CashNetRow[] {
+  const list = Array.isArray(rows) ? rows : [];
+  return list.map(r => {
+    const v = cashVariance(r);
+    const net = (Number(r?.in) || 0) - (Number(r?.out) || 0);
+    return {
+      month: String(r?.month ?? ''),
+      planned: v.planned,
+      plannedNet: v.planned ? v.plannedNet : null,
+      net,
+      variance: v.planned ? net - v.plannedNet : null,
+    };
+  });
+}
+
 // ── Cumulative position table ─────────────────────────────────────────
 
 export interface CashCumRow {

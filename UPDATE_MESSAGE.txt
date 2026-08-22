@@ -1,1 +1,1 @@
-EVM tabs consolidated to five: Dashboard (now carrying the S-curve chart with NOW marker + zoom brush, plus all the Trend content — indices, variances, forecast trend and approved history), Matrix, Periods, Forecast, Baseline. The S-Curve and Trend tabs are gone
+Cash Flow gets a Net tab: actual net per period (green when it collects, red when it burns) against the planned balance line, plus a read-only table with per-period variance and a total row. Unplanned periods state no figure rather than an invented one
